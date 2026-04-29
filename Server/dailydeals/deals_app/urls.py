@@ -46,8 +46,12 @@ from deals_app.views import (
     UserDashboardAPIView,
     UserNavbarAPIView,
     UserProfileAPIView,
+    FlyerReviewListAPIView,
+    FlyerReviewCreateUpdateAPIView,
 )
 from deals_app.auth_views import LoginAPIView, LogoutAPIView, RegisterAPIView
+
+
 
 urlpatterns = [
     path("home/", HomePageAPIView.as_view(), name="home-api"),
@@ -108,4 +112,8 @@ urlpatterns = [
     path("auth/admin/company-requests/", CompanyRequestListAPIView.as_view()),
     path("auth/admin/company-approve/<int:pk>/", ApproveCompanyAPIView.as_view()),
     path("auth/admin/company-reject/<int:pk>/", RejectCompanyAPIView.as_view()),
+
+    path("flyers/<int:flyer_id>/reviews/", FlyerReviewListAPIView.as_view()),
+    path("flyers/<int:flyer_id>/reviews/create/", FlyerReviewCreateUpdateAPIView.as_view()),
+
 ]

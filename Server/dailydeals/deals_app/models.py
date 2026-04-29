@@ -174,7 +174,8 @@ class DealFlyer(models.Model):
         ("restaurant", "Restaurants"),
         ("health", "Health & Clinics"),
         ("beauty", "Beauty & Spas"),
-        ("fashion", "Fashion & Sports"),
+        ("fashion", "Fashion"),
+        ("sports", "Sports"),
         ("home", "Home & Garden"),
         ("online", "Online Deals"),
     ]
@@ -254,11 +255,12 @@ class Product(models.Model):
         Category,
         on_delete=models.SET_NULL,
         null=True,
+        blank=True,
         related_name="products",
         db_index=True,
     )
     subcategory = models.ForeignKey(
-        SubCategory, on_delete=models.SET_NULL, null=True, related_name="products"
+        SubCategory, on_delete=models.SET_NULL, null=True,blank=True, related_name="products"
     )
 
     quantity = models.CharField(max_length=50, blank=True)

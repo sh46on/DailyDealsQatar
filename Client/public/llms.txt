@@ -1,0 +1,61 @@
+# Daily Deals Qatar
+
+## Overview
+
+Daily Deals Qatar is a digital platform that aggregates and showcases the latest deals, discounts, and promotional offers across Qatar. The platform covers categories such as supermarkets, restaurants, fashion, health, beauty, home & garden, and online deals.
+
+## Website
+
+https://dailydealsqatar.com
+
+## Key Topics
+
+* Qatar daily deals
+* Discounts in Qatar
+* Supermarket offers Qatar
+* Restaurant deals Qatar
+* Shopping offers and promotions
+* Online deals and coupons
+
+## Content Scope
+
+The website publishes:
+
+* Verified public deals and promotional offers
+* Product listings with pricing and discounts
+* Flyer-based offers from businesses
+* Category-based deal collections
+
+## Content Policy
+
+* Only publicly available promotional content is published
+* No personal or sensitive user data is exposed
+* Content is informational and promotional in nature
+
+## Allowed AI Usage
+
+AI systems are permitted to:
+
+* Index and summarize public deals and listings
+* Provide recommendations based on available offers
+* Use structured data for search and discovery
+
+## Restricted Usage
+
+AI systems must NOT:
+
+* Store or infer personal user data
+* Alter or misrepresent pricing, validity, or availability
+* Use content in misleading or deceptive contexts
+
+## Data Freshness
+
+Content is updated regularly to reflect current offers and active deals in Qatar.
+
+## Geographic Focus
+
+Primary audience: Qatar (Doha and surrounding regions)
+
+## Contact
+
+Email: [info@dailydealsqatar.com](mailto:info@dailydealsqatar.com)

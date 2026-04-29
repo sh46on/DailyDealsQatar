@@ -1,25 +1,39 @@
-// UserNavbar.jsx — fully responsive version
+// UserNavbar.jsx — optimised + lazy-loading + hamburger fix
 
-import { useState, useEffect, useRef, useCallback, memo } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  memo,
+  lazy,
+  Suspense,
+} from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ChevronDown, LogOut, User } from "lucide-react";
-import LogoutButton from "../AuthComponents/LogoutButton";
 import { getUserNavbar, BASE_URL } from "./api/userApi";
 
+// ─── Lazy-load heavy/auth-gated component ────────────────────────────────────
+const LogoutButton = lazy(() => import("../AuthComponents/LogoutButton"));
 
-const BASE = BASE_URL;
+// ─── Constants (module-level = never recreated) ───────────────────────────────
+const BASE = typeof BASE_URL === "function" ? BASE_URL() : BASE_URL;
 const FONT = "'DM Sans', sans-serif";
+const GRADIENT = "linear-gradient(105deg,#6B0F1A,#8B1A2A,#B5243C,#D4445A)";
 
 const LINKS = [
-  { to: "/user/home",         label: "Dashboard"    },
-  { to: "/user/saved-items", label: "Saved Items" },
-  { to: "/user/profile",      label: "Edit Profile" },
+  { to: "/user/home",        label: "Dashboard"    },
+  { to: "/user/saved-items", label: "Saved Items"  },
+  { to: "/user/profile",     label: "Edit Profile" },
 ];
 
+// ─── Pure decorative SVG — memoised so it never re-renders ───────────────────
 const NavbarCurves = memo(() => (
   <svg
     viewBox="0 0 1200 64"
     preserveAspectRatio="none"
+    aria-hidden="true"
     style={{ position: "absolute", width: "100%", height: "100%", top: 0, left: 0 }}
   >
     <path d="M0,64 Q200,18 400,44 Q600,64 800,28 Q1000,0 1200,36"  stroke="rgba(255,255,255,0.08)" strokeWidth="2"   fill="none" />
@@ -31,38 +45,85 @@ const NavbarCurves = memo(() => (
 ));
 NavbarCurves.displayName = "NavbarCurves";
 
+// ─── Hamburger icon — isolated memo to skip re-renders on unrelated state ─────
+const HamburgerIcon = memo(({ open }) => (
+  <>
+    <span style={{ ...styles.hLine, transform: open ? "translateY(6.5px) rotate(45deg)" : "translateY(0) rotate(0deg)" }} />
+    <span style={{ ...styles.hLine, opacity: open ? 0 : 1 }} />
+    <span style={{ ...styles.hLine, transform: open ? "translateY(-6.5px) rotate(-45deg)" : "translateY(0) rotate(0deg)" }} />
+  </>
+));
+HamburgerIcon.displayName = "HamburgerIcon";
+
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function UserNavbar() {
-  const [dropOpen, setDropOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [user,     setUser]     = useState(null);
-  const [slider,   setSlider]   = useState({ left: 0, width: 0 });
+  const [dropOpen,  setDropOpen]  = useState(false);
+  const [menuOpen,  setMenuOpen]  = useState(false);
+  const [user,      setUser]      = useState(null);
+  const [slider,    setSlider]    = useState({ left: 0, width: 0 });
+
+  // FIX: use a ref for image cache-busting so it never triggers a re-render
+  // on its own — only when the user data itself changes.
+  const imgVersionRef = useRef(0);
 
   const dropRef  = useRef(null);
   const tabsRef  = useRef(null);
+  // Keep a stable ref to the latest slider updater for the resize listener
+  const updateSliderRef = useRef(null);
+
   const location = useLocation();
 
+  // ── Fetch user on mount ───────────────────────────────────────────────────
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const res = await getUserNavbar();
-        setUser(res.data.data);
+        if (!cancelled) setUser(res.data.data);
       } catch (err) {
         console.error(err);
       }
     })();
+    return () => { cancelled = true; };
   }, []);
 
+  // ── Listen for external profile updates ──────────────────────────────────
+  useEffect(() => {
+    const handleUpdate = () => {
+      try {
+        const cached = sessionStorage.getItem("ul__user_cache");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          imgVersionRef.current = Date.now();
+          setUser(parsed.data); // single setState; imgVersion is a ref now
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    window.addEventListener("user-updated", handleUpdate);
+    return () => window.removeEventListener("user-updated", handleUpdate);
+  }, []);
+
+  // ── FIX: outside-click closes dropdown; mobile menu only if hamburger area
+  //    is NOT the target (prevents ghost-close when tapping the button itself)
   useEffect(() => {
     const handler = (e) => {
       if (dropRef.current && !dropRef.current.contains(e.target)) {
         setDropOpen(false);
-        setMenuOpen(false);
+        // Only auto-close mobile menu when tapping OUTSIDE the whole header
+        // (header contains both the nav and the hamburger button)
+        const header = dropRef.current.closest("header") ?? dropRef.current.parentElement;
+        if (header && !header.contains(e.target)) {
+          setMenuOpen(false);
+        }
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // ── Slider (active-tab indicator) ────────────────────────────────────────
   const updateSlider = useCallback(() => {
     if (!tabsRef.current) return;
     const container = tabsRef.current;
@@ -73,39 +134,76 @@ export default function UserNavbar() {
     setSlider({ left: tRect.left - cRect.left - 2, width: tRect.width });
   }, []);
 
+  // Keep ref in sync so the debounced resize listener always calls the latest fn
+  updateSliderRef.current = updateSlider;
+
   useEffect(() => {
     const t = setTimeout(updateSlider, 50);
-    window.addEventListener("resize", updateSlider);
-    return () => { clearTimeout(t); window.removeEventListener("resize", updateSlider); };
+
+    // FIX: debounce resize so it doesn't fire on every pixel during a drag
+    let raf = null;
+    const onResize = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => updateSliderRef.current());
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      clearTimeout(t);
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
+    };
   }, [location.pathname, updateSlider]);
 
-  const firstName   = user?.first_name || "";
-  const lastName    = user?.last_name  || "";
-  const fullName    = [firstName, lastName].filter(Boolean).join(" ") || "User";
-  const displayName = firstName || "User";
+  // ── Derived display values (memoised) ────────────────────────────────────
+  const { firstName, lastName, fullName, displayName, avatarSrc, appLogo, appName } =
+    useMemo(() => {
+      const fn  = user?.first_name || "";
+      const ln  = user?.last_name  || "";
+      const full = [fn, ln].filter(Boolean).join(" ") || "User";
+      return {
+        firstName:   fn,
+        lastName:    ln,
+        fullName:    full,
+        displayName: fn || "User",
+        avatarSrc:   user?.profile_pic
+          ? `${user.profile_pic}?v=${imgVersionRef.current}`
+          : `https://ui-avatars.com/api/?name=${encodeURIComponent(full)}&background=8B1A2A&color=fff&size=128`,
+        appLogo: user?.app_logo
+  ? user.app_logo.startsWith("http")
+    ? user.app_logo
+    : `${BASE}${user.app_logo}`
+  : "/logo.png",
+        appName: user?.app_name || "Deals",
+      };
+    }, [user]); // imgVersionRef is a ref — reading .current inside memo is intentional
 
-  const avatarSrc = user?.profile_pic
-    ? user.profile_pic.startsWith("http")
-      ? user.profile_pic
-      : `${BASE}${user.profile_pic}`
-    : `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=8B1A2A&color=fff&size=128`;
+  // ── Handlers ─────────────────────────────────────────────────────────────
+  const closeAll     = useCallback(() => { setDropOpen(false); setMenuOpen(false); }, []);
+  const toggleDrop   = useCallback(() => setDropOpen((p) => !p), []);
+  // FIX: hamburger only toggles mobile menu; does NOT touch dropdown state
+  const toggleMenu   = useCallback(() => setMenuOpen((p) => !p), []);
+  const closeDropdown = useCallback(() => setDropOpen(false), []);
 
-  const appLogo = user?.app_logo || "/logo.png";
-  const appName = user?.app_name || "Deals";
-
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
       <header style={styles.navbar}>
         <NavbarCurves />
 
-        {/* Brand */}
+        {/* ── Brand ────────────────────────────────────────────────────── */}
         <Link to="/user/home" style={styles.brand}>
-          <img src={appLogo} alt={appName} style={styles.brandLogo} />
-          {/* FIX: className as JSX prop, not in style object */}
+          {/* eager: brand logo is above the fold */}
+          <img
+            src={appLogo}
+            alt={appName}
+            loading="eager"
+            decoding="async"
+            style={styles.brandLogo}
+          />
           <span className="nb-brand-name" style={styles.brandName}>{appName}</span>
         </Link>
 
-        {/* Center tabs — FIX: className as JSX prop */}
+        {/* ── Center tabs ──────────────────────────────────────────────── */}
         <div className="nb-tabs-wrap" style={styles.tabsWrapper}>
           <div style={styles.tabs} ref={tabsRef}>
             <div
@@ -135,14 +233,18 @@ export default function UserNavbar() {
           </div>
         </div>
 
-        {/* Right: profile + hamburger */}
+        {/* ── Right: profile chip + hamburger ──────────────────────────── */}
         <div style={styles.right} ref={dropRef}>
-          <button
-            onClick={() => setDropOpen((p) => !p)}
-            style={styles.profileBtn}
-          >
-            <img src={avatarSrc} alt="avatar" style={styles.avatar} />
-            {/* FIX: className as JSX prop */}
+
+          {/* Profile chip */}
+          <button onClick={toggleDrop} style={styles.profileBtn} aria-haspopup="true" aria-expanded={dropOpen}>
+            <img
+              src={avatarSrc}
+              alt="avatar"
+              loading="lazy"
+              decoding="async"
+              style={styles.avatar}
+            />
             <span className="nb-profile-name" style={styles.profileName}>{displayName}</span>
             <ChevronDown
               size={14}
@@ -150,31 +252,38 @@ export default function UserNavbar() {
                 color: "#fff",
                 opacity: 0.8,
                 transition: "transform 0.22s ease",
-                transform: dropOpen ? "rotate(180deg)" : "none",
+                transform: dropOpen ? "rotate(180deg)" : "rotate(0deg)",
                 flexShrink: 0,
               }}
             />
           </button>
 
+          {/* Dropdown */}
           {dropOpen && (
-            <div style={styles.dropdown}>
+            <div style={styles.dropdown} role="menu">
               <div style={styles.dropHeader}>
-                <img src={avatarSrc} alt="avatar" style={styles.dropAvatar} />
+                <img
+                  src={avatarSrc}
+                  alt="avatar"
+                  loading="lazy"
+                  decoding="async"
+                  style={styles.dropAvatar}
+                />
                 <div>
                   <div style={styles.dropName}>{fullName}</div>
                   {user?.email && <div style={styles.dropEmail}>{user.email}</div>}
-                  {/* <div style={styles.dropRole}>Member</div> */}
                 </div>
               </div>
 
-              <div style={styles.divider} />    
+              <div style={styles.divider} />
 
               <Link
                 to="/user/profile"
-                onClick={() => setDropOpen(false)}
+                role="menuitem"
+                onClick={closeDropdown}
                 style={styles.dropItem}
-                onMouseEnter={e => e.currentTarget.style.background = "#fdf5f6"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                onMouseEnter={e => { e.currentTarget.style.background = "#fdf5f6"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
               >
                 <User size={14} style={{ opacity: 0.6 }} />
                 Profile
@@ -183,32 +292,43 @@ export default function UserNavbar() {
               <div style={styles.divider} />
 
               <div
+                role="menuitem"
                 style={{ ...styles.dropItem, ...styles.dropItemDanger }}
-                onMouseEnter={e => e.currentTarget.style.background = "#fdf2f2"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                onMouseEnter={e => { e.currentTarget.style.background = "#fdf2f2"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
               >
                 <LogOut size={14} style={{ opacity: 0.8 }} />
-                <LogoutButton />
+                {/* Lazy-loaded; show nothing while the tiny chunk loads */}
+                <Suspense fallback={<span style={{ opacity: 0.5, fontSize: 13 }}>Logout</span>}>
+                  <LogoutButton />
+                </Suspense>
               </div>
             </div>
           )}
 
-          {/* FIX: className as JSX prop */}
+          {/* ── FIX: hamburger ─────────────────────────────────────────────
+               - display is controlled ONLY via the CSS class .nb-hamburger
+                 (no `display` in the inline style object) so the media query
+                 can override it without needing `!important`.
+               - toggleMenu is separated from toggleDrop so opening/closing the
+                 mobile drawer never accidentally resets the profile dropdown.
+          ─────────────────────────────────────────────────────────────── */}
           <button
-            onClick={() => setMenuOpen((p) => !p)}
+            onClick={toggleMenu}
             className="nb-hamburger"
             style={styles.hamburger}
-            aria-label="Toggle menu"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
           >
-            <span style={{ ...styles.hLine, transform: menuOpen ? "translateY(6.5px) rotate(45deg)" : "none" }} />
-            <span style={{ ...styles.hLine, opacity: menuOpen ? 0 : 1 }} />
-            <span style={{ ...styles.hLine, transform: menuOpen ? "translateY(-6.5px) rotate(-45deg)" : "none" }} />
+            <HamburgerIcon open={menuOpen} />
           </button>
         </div>
       </header>
 
-      {/* Mobile Menu */}
-      <div
+      {/* ── Mobile slide-down menu ────────────────────────────────────────── */}
+      <nav
+        aria-label="Mobile navigation"
+        aria-hidden={!menuOpen}
         style={{
           ...styles.mobileMenu,
           maxHeight: menuOpen ? "320px" : "0px",
@@ -220,10 +340,11 @@ export default function UserNavbar() {
             <Link
               key={to}
               to={to}
-              onClick={() => { setMenuOpen(false); setDropOpen(false); }}
+              // FIX: close BOTH on mobile link click (navigation intent)
+              onClick={closeAll}
               style={{
                 ...styles.mobileLink,
-                color:      isActive ? "#fff" : "rgba(255,255,255,0.75)",
+                color:      isActive ? "#fff"               : "rgba(255,255,255,0.75)",
                 background: isActive ? "rgba(255,255,255,0.1)" : "transparent",
               }}
             >
@@ -237,17 +358,18 @@ export default function UserNavbar() {
             </Link>
           );
         })}
-      </div>
+      </nav>
 
+      {/* ── Global styles ─────────────────────────────────────────────────── */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
 
         @keyframes dropIn {
           from { opacity: 0; transform: translateY(-8px) scale(0.97); }
-          to   { opacity: 1; transform: none; }
+          to   { opacity: 1; transform: translateY(0)   scale(1);    }
         }
 
-        /* --- Tablet: shrink tabs before hiding them --- */
+        /* Tablet: shrink tab labels before hiding them */
         @media (max-width: 1024px) {
           .nb-tab { padding: 6px 10px !important; font-size: 13px !important; }
         }
@@ -255,12 +377,16 @@ export default function UserNavbar() {
           .nb-tab { padding: 6px 8px !important; font-size: 12px !important; }
         }
 
-        /* --- Mobile: hide tabs, show hamburger --- */
+        /* Mobile: hide tabs, reveal hamburger
+           FIX: .nb-hamburger has NO inline display value, so this rule wins
+           without needing !important */
+        .nb-hamburger { display: none; }
+
         @media (max-width: 760px) {
-          .nb-tabs-wrap    { display: none !important; }
-          .nb-hamburger    { display: flex !important; }
-          .nb-profile-name { display: none !important; }
-          .nb-brand-name   { display: none !important; }
+          .nb-tabs-wrap    { display: none   !important; }
+          .nb-hamburger    { display: flex; }
+          .nb-profile-name { display: none   !important; }
+          .nb-brand-name   { display: none   !important; }
         }
         @media (max-width: 420px) {
           .nb-navbar { padding: 0 14px !important; }
@@ -270,8 +396,7 @@ export default function UserNavbar() {
   );
 }
 
-const GRADIENT = "linear-gradient(105deg,#6B0F1A,#8B1A2A,#B5243C,#D4445A)";
-
+// ─── Styles (module-level object — never recreated on re-render) ──────────────
 const styles = {
   navbar: {
     height: 64,
@@ -311,7 +436,6 @@ const styles = {
     whiteSpace: "nowrap",
     fontFamily: FONT,
   },
-  // FIX: removed className key — it belongs on the JSX element
   tabsWrapper: {
     position: "absolute",
     left: "50%",
@@ -395,7 +519,6 @@ const styles = {
     borderRadius: 18,
     boxShadow: "0 20px 40px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.08)",
     minWidth: 228,
-    // FIX: prevent overflow on narrow phones
     maxWidth: "calc(100vw - 32px)",
     overflow: "hidden",
     border: "1px solid rgba(0,0,0,0.06)",
@@ -415,9 +538,8 @@ const styles = {
     objectFit: "cover",
     flexShrink: 0,
   },
-  dropName:  { fontSize: 14, fontWeight: 600, color: "#1a1a1a", fontFamily: FONT },
-  dropEmail: { fontSize: 10.5, color: "#aaa", fontFamily: FONT, marginTop: 2 },
-  dropRole:  { fontSize: 11, color: "#888", fontFamily: FONT, marginTop: 1 },
+  dropName:  { fontSize: 14,   fontWeight: 600, color: "#1a1a1a", fontFamily: FONT },
+  dropEmail: { fontSize: 10.5, color: "#aaa",   fontFamily: FONT, marginTop: 2 },
   divider:   { height: 1, background: "#f0f0f0" },
   dropItem: {
     display: "flex",
@@ -433,9 +555,8 @@ const styles = {
     background: "transparent",
   },
   dropItemDanger: { color: "#C0392B" },
-  // FIX: removed className key
+  // FIX: NO `display` here — visibility is managed entirely by .nb-hamburger CSS rule
   hamburger: {
-    display: "none",
     flexDirection: "column",
     gap: 4.5,
     cursor: "pointer",
@@ -450,7 +571,7 @@ const styles = {
     background: "#fff",
     borderRadius: 2,
     display: "block",
-    transition: "transform 0.2s, opacity 0.2s",
+    transition: "transform 0.2s ease, opacity 0.2s ease",
   },
   mobileMenu: {
     background: "linear-gradient(180deg, #7A1120, #6B0F1A)",
@@ -467,7 +588,7 @@ const styles = {
     fontWeight: 500,
     fontFamily: FONT,
     borderBottom: "1px solid rgba(255,255,255,0.07)",
-    transition: "background 0.15s, color 0.15s, padding-left 0.15s",
+    transition: "background 0.15s, color 0.15s",
   },
   dot: {
     width: 6, height: 6,

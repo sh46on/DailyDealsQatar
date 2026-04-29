@@ -1,0 +1,8 @@
+web: python manage.py runserver
+redis: redis-server
+rabbitmq: rabbitmq-server
+worker_default: celery -A dailydeals worker -Q default -l info
+worker_email: celery -A dailydeals worker -Q email -l info
+worker_analytics: celery -A dailydeals worker -Q analytics -l info
+worker_ai: celery -A dailydeals worker -Q ai -l info --concurrency=1 --prefetch-multiplier=1
+beat: celery -A dailydeals beat -l info

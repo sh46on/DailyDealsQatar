@@ -385,7 +385,7 @@ function buildMetrics(products) {
     },
     {
       label: "Avg. price", hint: "Across all products",
-      val: `₹${avgPrice.toLocaleString()}`, color: "#7c3aed", iconBg: "#faf5ff", orb: "#7c3aed",
+      val: `ر.ق${avgPrice.toLocaleString()}`, color: "#7c3aed", iconBg: "#faf5ff", orb: "#7c3aed",
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
           stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -431,7 +431,7 @@ function ProductCard({ product, delay, onToggle, onDelete }) {
           <div className="cp2-info">
             <div className="cp2-name" title={product.name}>{product.name}</div>
             <div className="cp2-price-row">
-              <span className="cp2-price">₹{Number(product.price).toLocaleString()}</span>
+              <span className="cp2-price">ر.ق{Number(product.price).toLocaleString()}</span>
               <span className={`cp2-pill ${isActive ? "cp2-pill-active" : "cp2-pill-inactive"}`}>
                 {isActive ? "Active" : "Inactive"}
               </span>

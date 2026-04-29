@@ -19,6 +19,9 @@ import CompanyRequestForm from "./pages/CompanyRequestForm";
 import AdminMarketplaceDashboard from "./AdminComponents/MarketplaceAdmin/AdminMarketplaceDashboard";
 import AdminManageListings from "./AdminComponents/MarketplaceAdmin/AdminManageListings";
 import AdminManageUsers from "./AdminComponents/MarketplaceAdmin/AdminManageUsers";
+import PrivacyPolicy from "./pages/extras/PrivacyPolicy";
+import TermsOfService from "./pages/extras/TermsOfService";
+import CookiePolicy from "./pages/extras/CookiePolicy";
 
 /* ══════════════════════════════════════════════════════════════════
    LAZY ROUTES — every chunk loads on demand
@@ -432,7 +435,12 @@ export default function App() {
             <Route path="/marketplace" element={<Marketplace />} />
             <Route path="/ticketing"   element={<Ticketing />} />
           <Route path="/companyrequest"   element={<CompanyRequestForm />} />
+          {/* Extra components */}
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/terms-of-service" element={<TermsOfService />} />
+          <Route path="/cookies" element={<CookiePolicy />} />
           </Route>
+
 
           {/* ─── Auth ─── */}
           <Route path="/login"    element={<AuthLogin />} />

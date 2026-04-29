@@ -366,8 +366,8 @@ export default function Footer() {
           {/* ── Col 3: Quick Links ── */}
           <div>
             <SectionLabel>Quick Links</SectionLabel>
-            <NavLink to="/terms"   icon={<FaFileAlt size={13} />}>Terms of Service</NavLink>
-            <NavLink to="/privacy" icon={<FaShieldAlt size={13} />}>Privacy Policy</NavLink>
+            <NavLink to="/terms-of-service"   icon={<FaFileAlt size={13} />}>Terms of Service</NavLink>
+            <NavLink to="/privacy-policy" icon={<FaShieldAlt size={13} />}>Privacy Policy</NavLink>
           </div>
         </div>
 
@@ -396,8 +396,8 @@ export default function Footer() {
             </span>
 
             <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
-              <PolicyLink to="/privacy" icon={<FiShield size={11} />}>Privacy Policy</PolicyLink>
-              <PolicyLink to="/terms"   icon={<FiFileText size={11} />}>Terms of Service</PolicyLink>
+              <PolicyLink to="/privacy-policy" icon={<FiShield size={11} />}>Privacy Policy</PolicyLink>
+              <PolicyLink to="/terms-of-service"   icon={<FiFileText size={11} />}>Terms of Service</PolicyLink>
               <PolicyLink to="/cookies" icon={<FiBell size={11} />}>Cookie Policy</PolicyLink>
             </div>
           </div>

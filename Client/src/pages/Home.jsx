@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import { useHomeData } from "../hooks/useHomeData";
 import { Document, Page, pdfjs } from "react-pdf";
@@ -10,12 +10,14 @@ import {
   GraduationCap, Smartphone, SlidersHorizontal,
   TrendingUp, Clock, AlertTriangle, Inbox,
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
-  Package, X, ZoomIn, Tag,
+  Package, X, ZoomIn, Tag, Search,
+  Flame, Calendar, Eye, Building2, Star,
 } from "lucide-react";
 
 import ProductModal from "../components/modals/ProductModal";
-import PdfModal     from "../components/modals/PdfModal";
-import {getImageUrl} from "../api/media"
+import PdfModal from "../components/modals/PdfModal";
+import { getImageUrl } from "../api/media";
+
 /* ─────────────────────────────────────────────
    PDF.JS WORKER
 ───────────────────────────────────────────── */
@@ -23,23 +25,74 @@ pdfjs.GlobalWorkerOptions.workerSrc =
   `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 const PDF_OPTIONS = {
-  cMapUrl:             `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
-  cMapPacked:          true,
+  cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
+  cMapPacked: true,
   standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/standard_fonts/`,
 };
 
 /* ─────────────────────────────────────────────
-   BRAND PALETTE
+   DESIGN TOKENS
 ───────────────────────────────────────────── */
-const R      = "#E30613";
-const DARK   = "#1C1F26";
-const BG     = "#F5F4F1";
-const WHITE  = "#FFFFFF";
-const BORDER = "#E4E1DC";
-const MUTED  = "#8A8580";
-const RED_BG = "#FFF1F1";
+const T = {
+  red:         "#E30613",
+  redDark:     "#B80010",
+  redDeep:     "#7F0009",
+  redLight:    "#FFF0F0",
+  redGlow:     "rgba(227,6,19,0.18)",
+  dark:        "#0D0F14",
+  darkMid:     "#1A1D27",
+  charcoal:    "#2D3142",
+  slate:       "#4A4E6A",
+  muted:       "#8B8FA8",
+  subtle:      "#C4C6D6",
+  border:      "#EAEBF4",
+  borderLight: "#F2F3FA",
+  bg:          "#F4F5FB",
+  bgCard:      "#FAFBFF",
+  white:       "#FFFFFF",
+  success:     "#00C48C",
+  warning:     "#F59E0B",
+  gold:        "#FFB800",
+  overlay:     "rgba(13,15,20,0.6)",
+};
 
+const FONT_URL =
+  "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&family=Poppins:wght@400;500;600;700&display=swap";
 
+/* ─────────────────────────────────────────────
+   CATEGORY TYPE META
+───────────────────────────────────────────── */
+const CAT_META = {
+  supermarket:  { label: "Supermarkets",     Icon: ShoppingCart, accent: "#059669", bg: "linear-gradient(135deg,#ECFDF5,#D1FAE5)", pill: "#D1FAE5", pillTx: "#065F46", glow: "rgba(5,150,105,0.2)"   },
+  restaurant:   { label: "Restaurants",      Icon: Utensils,     accent: "#EA580C", bg: "linear-gradient(135deg,#FFF7ED,#FFEDD5)", pill: "#FFEDD5", pillTx: "#9A3412", glow: "rgba(234,88,12,0.2)"   },
+  health:       { label: "Health & Clinics", Icon: Heart,        accent: "#2563EB", bg: "linear-gradient(135deg,#EFF6FF,#DBEAFE)", pill: "#DBEAFE", pillTx: "#1E3A8A", glow: "rgba(37,99,235,0.2)"   },
+  beauty:       { label: "Beauty & Spas",    Icon: Smartphone,   accent: "#DB2777", bg: "linear-gradient(135deg,#FDF2F8,#FCE7F3)", pill: "#FCE7F3", pillTx: "#831843", glow: "rgba(219,39,119,0.2)" },
+  fashion:      { label: "Fashion & Sports", Icon: Shirt,        accent: "#7C3AED", bg: "linear-gradient(135deg,#F5F3FF,#EDE9FE)", pill: "#EDE9FE", pillTx: "#4C1D95", glow: "rgba(124,58,237,0.2)" },
+  home:         { label: "Home & Garden",    Icon: HomeIcon,     accent: "#0D9488", bg: "linear-gradient(135deg,#F0FDFA,#CCFBF1)", pill: "#CCFBF1", pillTx: "#134E4A", glow: "rgba(13,148,136,0.2)" },
+  online:       { label: "Online Deals",     Icon: Moon,         accent: "#D97706", bg: "linear-gradient(135deg,#FFFBEB,#FEF3C7)", pill: "#FEF3C7", pillTx: "#78350F", glow: "rgba(217,119,6,0.2)"  },
+  electronics:  { label: "Electronics",      Icon: Smartphone,   accent: "#0891B2", bg: "linear-gradient(135deg,#ECFEFF,#CFFAFE)", pill: "#CFFAFE", pillTx: "#164E63", glow: "rgba(8,145,178,0.2)"  },
+};
+const CAT_ALL = { label: "All Offers", Icon: Sparkles, accent: T.red, bg: `linear-gradient(135deg,#FFF0F0,#FFE0E0)`, pill: "#FECDD3", pillTx: "#881337", glow: T.redGlow };
+const catTypeMeta = (type) => CAT_META[type?.toLowerCase()] ?? CAT_ALL;
+
+/* ─────────────────────────────────────────────
+   NUMERIC CATEGORY COLORS
+───────────────────────────────────────────── */
+const CAT_COLORS = {
+  1: { bg: "#EFF6FF", accent: "#2563EB", pill: "#DBEAFE", pillText: "#1E3A8A" },
+  2: { bg: "#ECFDF5", accent: "#059669", pill: "#D1FAE5", pillText: "#064E3B" },
+  3: { bg: "#FFF7ED", accent: "#EA580C", pill: "#FFEDD5", pillText: "#7C2D12" },
+  4: { bg: "#FDF2F8", accent: "#DB2777", pill: "#FCE7F3", pillText: "#831843" },
+  5: { bg: "#FEF2F2", accent: T.red,     pill: "#FEE2E2", pillText: "#7F1D1D" },
+  6: { bg: "#F0FDFA", accent: "#0D9488", pill: "#CCFBF1", pillText: "#134E4A" },
+  7: { bg: "#FFFBEB", accent: "#D97706", pill: "#FEF3C7", pillText: "#78350F" },
+  8: { bg: "#F5F3FF", accent: "#7C3AED", pill: "#EDE9FE", pillText: "#4C1D95" },
+};
+const getCat = (id) => CAT_COLORS[id] ?? { bg: "#F8F9FA", accent: T.red, pill: "#FFE4E6", pillText: "#9F1239" };
+
+/* ─────────────────────────────────────────────
+   AVATAR PALETTES
+───────────────────────────────────────────── */
 const AVATAR_PALETTES = [
   { bg: "#EEF2FF", text: "#3730A3" },
   { bg: "#F0FDF4", text: "#166534" },
@@ -50,41 +103,6 @@ const AVATAR_PALETTES = [
   { bg: "#FEF2F2", text: "#991B1B" },
   { bg: "#F5F3FF", text: "#4C1D95" },
 ];
-
-const CAT_COLORS = {
-  1: { bg: "#EFF6FF", accent: "#2563EB", pill: "#DBEAFE", pillText: "#1E3A8A" },
-  2: { bg: "#ECFDF5", accent: "#059669", pill: "#D1FAE5", pillText: "#064E3B" },
-  3: { bg: "#FFF7ED", accent: "#EA580C", pill: "#FFEDD5", pillText: "#7C2D12" },
-  4: { bg: "#FDF2F8", accent: "#DB2777", pill: "#FCE7F3", pillText: "#831843" },
-  5: { bg: "#FEF2F2", accent: R,         pill: "#FEE2E2", pillText: "#7F1D1D" },
-  6: { bg: "#F0FDFA", accent: "#0D9488", pill: "#CCFBF1", pillText: "#134E4A" },
-  7: { bg: "#FFFBEB", accent: "#D97706", pill: "#FEF3C7", pillText: "#78350F" },
-  8: { bg: "#F5F3FF", accent: "#7C3AED", pill: "#EDE9FE", pillText: "#4C1D95" },
-};
-const getCat = (id) =>
-  CAT_COLORS[id] || { bg: "#F8F9FA", accent: R, pill: "#FFE4E6", pillText: "#9F1239" };
-
-/* ─────────────────────────────────────────────
-   PDF URL BUILDER
-───────────────────────────────────────────── */
-function buildPdfUrl(raw) {
-  if (!raw) return null;
-  let url = raw.replace(/["']/g, "").trim();
-  try { url = decodeURIComponent(url); } catch (_) {}
-  if (url.startsWith("/media/") || url.startsWith("/static/")) {
-    url = getImageUrl(url);
-  } else if (url.startsWith("/") && !url.startsWith("//")) {
-    url = window.location.origin + url;
-  }
-  if (
-    !url.startsWith("http://") &&
-    !url.startsWith("https://") &&
-    !url.startsWith("blob:")
-  ) {
-    url = "https://" + url;
-  }
-  return url;
-}
 
 /* ─────────────────────────────────────────────
    NAV CONFIG
@@ -106,41 +124,60 @@ const FIXED_PDF_NAV = [
 /* ─────────────────────────────────────────────
    HELPERS
 ───────────────────────────────────────────── */
-// FIX 4 (partial): derive current page number from pagination URLs
-function derivePageFromPagination(next, previous) {
-  if (next) {
-    try {
-      const p = parseInt(new URL(next).searchParams.get("page") || "2", 10);
-      return p - 1; // next page is p, so current is p-1
-    } catch (_) {}
+function buildPdfUrl(raw) {
+  if (!raw) return null;
+  let url = raw.replace(/["']/g, "").trim();
+  try { url = decodeURIComponent(url); } catch (_) {}
+  if (url.startsWith("/media/") || url.startsWith("/static/")) {
+    url = getImageUrl(url);
+  } else if (url.startsWith("/") && !url.startsWith("//")) {
+    url = window.location.origin + url;
   }
-  if (previous) {
-    try {
-      const p = parseInt(new URL(previous).searchParams.get("page") || "1", 10);
-      return p + 1; // previous page is p, so current is p+1
-    } catch (_) {}
+  if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("blob:")) {
+    url = "https://" + url;
   }
-  return 1;
+  return url;
+}
+
+/* ─────────────────────────────────────────────
+   LAZY VISIBLE HOOK
+───────────────────────────────────────────── */
+function useLazyVisible(rootMargin = "200px") {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || visible) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
+      { rootMargin }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [rootMargin, visible]);
+
+  return [ref, visible];
 }
 
 /* ══════════════════════════════════════════════
    SUB-COMPONENTS
 ══════════════════════════════════════════════ */
+
 function FullScreenLoader() {
   return (
-    <div className="fsloader">
+    <div className="fsloader" role="status" aria-label="Loading deals">
       <div className="fsloader-inner">
         <div className="fsloader-logo">
-          <svg width="46" height="46" viewBox="0 0 46 46" fill="none">
-            <rect width="46" height="46" rx="13" fill={R} />
-            <path d="M11 24L20 33L35 14" stroke={WHITE}
-              strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+          <svg width="52" height="52" viewBox="0 0 52 52" fill="none" aria-hidden="true">
+            <rect width="52" height="52" rx="16" fill={T.red} />
+            <path d="M13 27L22 36L39 16" stroke={T.white}
+              strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
-        <div className="fsloader-bars">
-          {[0, 1, 2, 3, 4].map(i => (
-            <div key={i} className="fsloader-bar"
-              style={{ animationDelay: `${i * 0.12}s` }} />
+        <div className="fsloader-bars" aria-hidden="true">
+          {[0,1,2,3,4].map(i => (
+            <div key={i} className="fsloader-bar" style={{ animationDelay: `${i * 0.12}s` }} />
           ))}
         </div>
         <p className="fsloader-text">Loading today's deals…</p>
@@ -151,178 +188,200 @@ function FullScreenLoader() {
 
 function AdPlaceholder({ label = "Advertisement" }) {
   return (
-    <div style={{
+    <div aria-label={label} role="complementary" style={{
       display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
       gap: 6, width: "100%", height: "100%", minHeight: "inherit",
     }}>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-        stroke={MUTED} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        stroke={T.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <rect x="2" y="5" width="20" height="14" rx="2" />
         <path d="M2 10h20" />
       </svg>
-      <span style={{
-        fontSize: 10, color: MUTED, fontWeight: 600,
-        letterSpacing: ".06em", textTransform: "uppercase",
-      }}>
+      <span style={{ fontSize: 10, color: T.muted, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase" }}>
         {label}
       </span>
     </div>
   );
 }
 
-function PDFCard({ pdf, onView }) {
-  const c        = getCat(pdf.catColorId);
-  const palette  = AVATAR_PALETTES[(pdf.id || 0) % AVATAR_PALETTES.length];
-  const initials = pdf.company?.slice(0, 2).toUpperCase() || "??";
-  const [thumbState, setThumbState] = useState("loading");
-  const pdfUrl = useMemo(() => buildPdfUrl(pdf.url), [pdf.url]);
+/* ── Lazy PDF Thumbnail ── */
+function LazyPDFThumb({ pdfUrl, catAccent, title }) {
+  const [ref, visible] = useLazyVisible("300px");
+  const [thumbState, setThumbState] = useState("idle");
+
+  useEffect(() => {
+    if (visible && thumbState === "idle") setThumbState("loading");
+  }, [visible, thumbState]);
 
   return (
-    <div className="pcard" onClick={() => onView(pdf)}>
-      {pdf.categoryTypeLabel && (
-        <div className="pcard-badge" style={{ background: c.pill, color: c.pillText }}>
-          {pdf.categoryTypeLabel}
+    <div ref={ref} className="pdf-mag-thumb-outer">
+      <div
+        className="pdf-mag-fallback"
+        style={{ opacity: thumbState === "ready" ? 0 : 1, background: catAccent + "18" }}
+      >
+        {thumbState === "loading"
+          ? <div className="pdf-spin" style={{ borderTopColor: catAccent }} />
+          : (
+            <>
+              <FileText size={32} color={catAccent} strokeWidth={1.4} />
+              <span className="pdf-fallback-label">{title}</span>
+            </>
+          )
+        }
+      </div>
+
+      {(thumbState === "loading" || thumbState === "ready") && (
+        <div className="pdf-mag-doc" style={{ opacity: thumbState === "ready" ? 1 : 0 }}>
+          <Document
+            file={pdfUrl}
+            onLoadSuccess={() => setThumbState("ready")}
+            onLoadError={() => setThumbState("error")}
+            loading={null}
+            options={PDF_OPTIONS}
+          >
+            <Page pageNumber={1} height={280} renderTextLayer={false} renderAnnotationLayer={false} />
+          </Document>
         </div>
       )}
-      <div className="pcard-img" style={{ background: c.bg }}>
-        <div className="pcard-thumb-fallback" style={{
-          opacity: thumbState === "ready" ? 0 : 1,
-          pointerEvents: "none", color: c.accent, background: c.bg,
-        }}>
-          {thumbState === "loading" && pdfUrl
-            ? <div className="spinner"
-                style={{ borderColor: `${c.accent}33`, borderTopColor: c.accent }} />
-            : (
-              <>
-                <FileText size={36} strokeWidth={1.4} />
-                <span style={{
-                  fontSize: 11, fontWeight: 600, marginTop: 8,
-                  textAlign: "center", padding: "0 8px", color: DARK, lineHeight: 1.3,
-                }}>
-                  {pdf.title}
-                </span>
-              </>
-            )
-          }
+
+      {thumbState === "error" && (
+        <div className="pdf-mag-fallback" style={{ background: catAccent + "12" }}>
+          <FileText size={32} color={catAccent} strokeWidth={1.4} />
+          <span className="pdf-fallback-label">{title}</span>
         </div>
-        {pdfUrl && (
-          <div className="pcard-thumb-pdf" style={{ opacity: thumbState === "ready" ? 1 : 0 }}>
-            <Document
-              file={pdfUrl}
-              onLoadSuccess={() => setThumbState("ready")}
-              onLoadError={() => setThumbState("error")}
-              loading={null}
-              options={PDF_OPTIONS}
-            >
-              <Page
-                pageNumber={1}
-                height={165}
-                renderTextLayer={false}
-                renderAnnotationLayer={false}
-              />
-            </Document>
-          </div>
-        )}
-        <div className="pcard-img-overlay"><FileText size={20} color={WHITE} /></div>
-      </div>
-      <div className="pcard-body">
-        <p className="pcard-title">{pdf.title}</p>
-        {pdf.validUntil && (
-          <p style={{ fontSize: 11, color: MUTED, marginBottom: 8 }}>
-            Valid till {pdf.validUntil}
-          </p>
-        )}
-        <div className="pcard-footer">
-          <div className="pcard-company">
-            <div className="pcard-avatar" style={{ background: palette.bg, color: palette.text }}>
-              {pdf.companyLogo
-                ? <img src={pdf.companyLogo} alt={pdf.company}
-                    style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                : initials
-              }
-            </div>
-            <span className="pcard-cname">{pdf.company}</span>
-          </div>
-          <button
-            className="pcard-btn"
-            style={{ background: c.accent }}
-            onClick={e => { e.stopPropagation(); onView(pdf); }}
-          >
-            View Flyer
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
 
-function ProductCard({ product, onViewDeal }) {
-  const c        = getCat(product.categoryId);
-  const initials = product.company?.slice(0, 2).toUpperCase() || "??";
-  const palette  = AVATAR_PALETTES[(product.companyId || 0) % AVATAR_PALETTES.length];
+/* ── PDF Card ── */
+function PDFCard({ pdf, onView }) {
+  const m = catTypeMeta(pdf.categoryType);
+  const CIcon = m.Icon;
+  const pdfUrl = useMemo(() => buildPdfUrl(pdf.url), [pdf.url]);
+  const [cardRef, cardVisible] = useLazyVisible("150px");
+
+  const daysLeft = pdf.validUntil
+    ? Math.max(0, Math.ceil((new Date(pdf.validUntil) - new Date()) / 86400000))
+    : null;
 
   return (
-    <div className="pcard" onClick={() => onViewDeal(product)}>
-      {product.badge && (
-        <div className="pcard-badge" style={{ background: c.pill, color: c.pillText }}>
-          {product.badge}
+    <article
+      ref={cardRef}
+      className={`pdf-mag-card ${cardVisible ? "pdf-mag-visible" : ""}`}
+      onClick={() => onView(pdf)}
+      aria-label={`${pdf.title} flyer from ${pdf.company}`}
+    >
+      <div className="pdf-mag-visual">
+        <div className="pdf-mag-bg" style={{ background: m.bg }} />
+
+        {pdfUrl && cardVisible && (
+          <LazyPDFThumb pdfUrl={pdfUrl} catAccent={m.accent} title={pdf.title} />
+        )}
+
+        {(!pdfUrl || !cardVisible) && (
+          <div className="pdf-mag-icon-fallback">
+            <CIcon size={40} color={m.accent} strokeWidth={1.2} />
+          </div>
+        )}
+
+        <div className="pdf-mag-gradient" />
+
+        <div className="pdf-mag-top">
+          <div className="pdf-mag-badge" style={{ background: m.accent }}>
+            <CIcon size={9} strokeWidth={2.5} />
+            <span>{m.label || pdf.categoryTypeLabel}</span>
+          </div>
+          {daysLeft !== null && daysLeft <= 7 && (
+            <span className="pdf-mag-urgent">
+              <Flame size={9} />
+              {daysLeft === 0 ? "Last day!" : `${daysLeft}d left`}
+            </span>
+          )}
         </div>
-      )}
-      <div className="pcard-img" style={{ background: c.bg }}>
-        {product.image
-          ? <img src={product.image} alt={product.title}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          : (
-            <div className="pcard-img-placeholder" style={{ color: c.accent }}>
-              <Package size={36} strokeWidth={1.4} />
-              <span style={{ fontSize: 10, marginTop: 6, opacity: 0.6 }}>{product.company}</span>
-            </div>
-          )
-        }
-        <div className="pcard-img-overlay"><ZoomIn size={20} color={WHITE} /></div>
+
+        <div className="pdf-mag-bottom">
+          <div className="pdf-mag-co-row">
+            {pdf.companyLogo
+              ? <img src={getImageUrl(pdf.companyLogo)} alt={pdf.company} className="pdf-mag-co-img" loading="lazy" />
+              : <div className="pdf-mag-co-dot" style={{ background: m.accent }}>{(pdf.company || "C")[0]}</div>
+            }
+            <span className="pdf-mag-co-name">{pdf.company}</span>
+          </div>
+          <h4 className="pdf-mag-title">{pdf.title}</h4>
+          <div className="pdf-mag-meta-row">
+            {pdf.validUntil && (
+              <span className="pdf-mag-date">
+                <Calendar size={9} />
+                Ends {pdf.validUntil}
+              </span>
+            )}
+            <span className="pdf-mag-view-cta" style={{ background: m.accent }}>
+              <Eye size={10} />
+              View
+            </span>
+          </div>
+        </div>
       </div>
-      <div className="pcard-body">
-        <p className="pcard-title">{product.title}</p>
-        <div className="pcard-pricing">
-          <span className="pcard-price">{product.price}</span>
-          {product.originalPrice && <span className="pcard-orig">{product.originalPrice}</span>}
-        </div>
+    </article>
+  );
+}
+
+/* ── Product Card ── */
+function ProductCard({ product, onViewDeal }) {
+  const [imgErr, setImgErr] = useState(false);
+  const c = getCat(product.categoryId);
+
+  return (
+    <article
+      className="prd-card"
+      onClick={() => onViewDeal(product)}
+      aria-label={`${product.title} — ${product.price}`}
+    >
+      <div className="prd-img-wrap">
+        {product.image && !imgErr
+          ? <img src={product.image} alt={product.title} onError={() => setImgErr(true)} loading="lazy" decoding="async" />
+          : <div className="prd-img-ph"><Package size={32} strokeWidth={1.2} color={T.subtle} /></div>
+        }
         {product.discount && (
-          <div className="pcard-discount" style={{ background: c.pill, color: c.pillText }}>
+          <div className="prd-discount">
+            <Star size={9} fill={T.white} color={T.white} />
             {product.discount}
           </div>
         )}
-        <div className="pcard-footer">
-          <div className="pcard-company">
-            <div className="pcard-avatar" style={{ background: palette.bg, color: palette.text }}>
-              {initials}
-            </div>
-            <span className="pcard-cname">{product.company}</span>
-          </div>
-          <button
-            className="pcard-btn"
-            style={{ background: c.accent }}
-            onClick={e => { e.stopPropagation(); onViewDeal(product); }}
-          >
-            View Deal
-          </button>
+        {product.badge && (
+          <div className="prd-badge" style={{ background: c.accent }}>{product.badge}</div>
+        )}
+        <div className="prd-shine" />
+      </div>
+
+      <div className="prd-body">
+        <p className="prd-name">{product.title}</p>
+        <div className="prd-price-row">
+          <span className="prd-price">{product.price}</span>
+          {product.originalPrice && <span className="prd-old">{product.originalPrice}</span>}
+        </div>
+        <div className="prd-company">
+          <Building2 size={10} color={T.muted} />
+          <span>{product.company}</span>
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
+/* ── Company Carousel ── */
 function CompanyCarousel({ companies, selectedCompanyId, onSelect }) {
   const trackRef = useRef(null);
   const wrapRef  = useRef(null);
   const [offset, setOffset] = useState(0);
   const STEP = 220;
 
-  const getMax = () => {
+  const getMax = useCallback(() => {
     if (!trackRef.current || !wrapRef.current) return 0;
     return Math.max(0, trackRef.current.scrollWidth - wrapRef.current.clientWidth);
-  };
+  }, []);
 
   useEffect(() => {
     if (trackRef.current)
@@ -334,66 +393,75 @@ function CompanyCarousel({ companies, selectedCompanyId, onSelect }) {
   if (!companies?.length) return null;
 
   return (
-    <div className="carousel">
-      <button className="car-arrow" disabled={offset === 0}
-        onClick={() => setOffset(o => Math.max(0, o - STEP))}>
+    <nav className="co-carousel" aria-label="Filter by store">
+      <button className="co-nav-btn" disabled={offset === 0}
+        onClick={() => setOffset(o => Math.max(0, o - STEP))} aria-label="Scroll left">
         <ChevronLeft size={14} />
       </button>
-      <div ref={wrapRef} className="car-wrap">
-        <div ref={trackRef} className="car-track">
-          <div
-            className={`car-cell car-cell-all ${selectedCompanyId === null ? "car-cell-active" : ""}`}
+      <div ref={wrapRef} className="co-wrap">
+        <div ref={trackRef} className="co-track">
+          <button
+            className={`co-pill co-pill-all ${selectedCompanyId === null ? "co-pill-on" : ""}`}
             onClick={() => onSelect(null)}
+            aria-pressed={selectedCompanyId === null}
           >
-            <span style={{ fontSize: 11, fontWeight: 700 }}>All</span>
-          </div>
+            <Sparkles size={12} strokeWidth={selectedCompanyId === null ? 2.5 : 1.8} />
+            <span>All</span>
+          </button>
+
           {companies.map((c, i) => {
             const pal      = AVATAR_PALETTES[i % AVATAR_PALETTES.length];
             const isActive = selectedCompanyId === c.id;
             return (
-              <div
+              <button
                 key={c.id}
-                className={`car-cell ${isActive ? "car-cell-active" : ""}`}
+                className={`co-pill ${isActive ? "co-pill-on" : ""}`}
                 title={c.name}
+                aria-pressed={isActive}
+                aria-label={`Filter by ${c.name}`}
                 onClick={() => onSelect(isActive ? null : c.id)}
               >
-                {c.logo
-                  ? <img src={c.logo} alt={c.name}
-                      style={{ maxWidth: "80%", maxHeight: "70%", objectFit: "contain" }} />
-                  : (
-                    <div className="car-initials" style={{ background: pal.bg, color: pal.text }}>
-                      <span className="car-abbr">{c.name?.slice(0, 2).toUpperCase()}</span>
-                      <span className="car-fullname">{c.name?.split(" ")[0]}</span>
-                    </div>
-                  )
-                }
-              </div>
+                <div className="co-pill-avatar" style={!c.logo ? { background: pal.bg, color: pal.text } : {}}>
+                  {c.logo
+                    ? <img src={getImageUrl(c.logo)} alt={c.name} loading="lazy" />
+                    : <span>{c.name?.slice(0, 2).toUpperCase()}</span>
+                  }
+                </div>
+                <span>{c.name?.split(" ")[0]}</span>
+              </button>
             );
           })}
         </div>
       </div>
-      <button className="car-arrow"
-        onClick={() => setOffset(o => Math.min(getMax(), o + STEP))}>
+      <button className="co-nav-btn" onClick={() => setOffset(o => Math.min(getMax(), o + STEP))} aria-label="Scroll right">
         <ChevronRight size={14} />
       </button>
-    </div>
+    </nav>
   );
 }
 
+/* ── Sidebar ── */
 function Sidebar({ categories, active, onSelect, onClose }) {
   const [openIds, setOpenIds] = useState({});
   const toggle = id => setOpenIds(p => ({ ...p, [id]: !p[id] }));
 
   return (
-    <aside className="sidebar">
-      {onClose && <button className="sidebar-close" onClick={onClose}>✕</button>}
-      <div className="sidebar-heading">Categories</div>
+    <aside className="sidebar" aria-label="Product categories">
+      {onClose && (
+        <button className="sidebar-close" onClick={onClose} aria-label="Close categories">
+          <X size={16} />
+        </button>
+      )}
+      <div className="sidebar-heading">
+        <SlidersHorizontal size={13} color={T.red} />
+        Categories
+      </div>
 
       <button
         className={`scat-item ${active.catId === null && active.subId === null ? "active" : ""}`}
         onClick={() => { onSelect({ catId: null, subId: null }); onClose?.(); }}
       >
-        <span className="scat-dot" style={{ background: active.catId === null ? R : BORDER }} />
+        <span className="scat-dot" style={{ background: active.catId === null ? T.red : T.border }} />
         <span className="scat-label">All Products</span>
         {active.catId === null && <span className="scat-badge">All</span>}
       </button>
@@ -405,16 +473,18 @@ function Sidebar({ categories, active, onSelect, onClose }) {
         const c        = getCat(cat.id);
         return (
           <div key={cat.id}>
-            <button className={`scat-item ${isActive ? "active" : ""}`}>
-              <span className="scat-dot" style={{ background: isActive ? c.accent : BORDER }} />
+            <button className={`scat-item ${isActive ? "active" : ""}`}
+              style={isActive ? { background: T.redLight } : {}}>
+              <span className="scat-dot" style={{ background: isActive ? c.accent : T.border }} />
               <span className="scat-label"
                 onClick={() => { onSelect({ catId: cat.id, subId: null }); onClose?.(); }}>
                 {cat.name}
               </span>
-              {cat.count > 0 && <span className="scat-count">{cat.count}</span>}
+              {cat.count > 0 && <em className="scat-count">{cat.count}</em>}
               {hasSub && (
                 <span className="scat-expand"
-                  onClick={e => { e.stopPropagation(); toggle(cat.id); }}>
+                  onClick={e => { e.stopPropagation(); toggle(cat.id); }}
+                  aria-label={isOpen ? "Collapse" : "Expand"}>
                   {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                 </span>
               )}
@@ -428,9 +498,9 @@ function Sidebar({ categories, active, onSelect, onClose }) {
                     onClick={() => { onSelect({ catId: cat.id, subId: sub.id }); onClose?.(); }}
                   >
                     <span className="sub-dot"
-                      style={{ background: active.subId === sub.id ? c.accent : "#D1C8C0" }} />
+                      style={{ background: active.subId === sub.id ? c.accent : T.subtle }} />
                     {sub.name}
-                    {sub.count > 0 && <span className="scat-count">{sub.count}</span>}
+                    {sub.count > 0 && <em className="scat-count">{sub.count}</em>}
                   </button>
                 ))}
               </div>
@@ -444,8 +514,8 @@ function Sidebar({ categories, active, onSelect, onClose }) {
 
 function EmptyState({ message, sub }) {
   return (
-    <div className="empty">
-      <div className="empty-icon"><Inbox size={44} strokeWidth={1.2} color="#C9C0B8" /></div>
+    <div className="empty-state" role="status">
+      <div className="empty-icon"><Inbox size={40} strokeWidth={1.2} color={T.subtle} /></div>
       <p className="empty-title">{message}</p>
       <p className="empty-sub">{sub}</p>
     </div>
@@ -454,21 +524,17 @@ function EmptyState({ message, sub }) {
 
 function PaginationBar({ page, total, onNext, onPrev, hasNext, hasPrev }) {
   return (
-    <div className="pagination">
-      <button className="pg-btn" onClick={onPrev} disabled={!hasPrev}>
-        <ChevronLeft size={14} />
-        Prev
+    <nav className="pagination" aria-label="Page navigation">
+      <button className="pg-btn" onClick={onPrev} disabled={!hasPrev} aria-label="Previous page">
+        <ChevronLeft size={14} /> Prev
       </button>
-
-      <span style={{ padding: "0 10px", fontSize: 13 }}>
+      <span style={{ padding: "0 10px", fontSize: 13, color: T.slate }} aria-current="page">
         Page {page} of {total}
       </span>
-
-      <button className="pg-btn" onClick={onNext} disabled={!hasNext}>
-        Next
-        <ChevronRight size={14} />
+      <button className="pg-btn" onClick={onNext} disabled={!hasNext} aria-label="Next page">
+        Next <ChevronRight size={14} />
       </button>
-    </div>
+    </nav>
   );
 }
 
@@ -478,7 +544,6 @@ function PaginationBar({ page, total, onNext, onPrev, hasNext, hasPrev }) {
 export default function Home() {
   const navigate = useNavigate();
 
-  // ── STATE ──
   const [activeNav,       setActiveNav]       = useState("all");
   const [activeTab,       setActiveTab]       = useState("top");
   const [active,          setActive]          = useState({ catId: null, subId: null });
@@ -487,10 +552,13 @@ export default function Home() {
   const [productModal,    setProductModal]    = useState(null);
   const [pdfModal,        setPdfModal]        = useState(null);
 
-  // ── DERIVED ──
+  // Independent pagination cursors — null means "page 1"
+  const [productPageUrl, setProductPageUrl] = useState(null);
+  const [flyerPageUrl,   setFlyerPageUrl]   = useState(null);
+
   const showPDFs = activeNav !== PRODUCTS_NAV_KEY;
 
-  // ── ROLE REDIRECT ──
+  // Redirect logged-in users to their own dashboards
   useEffect(() => {
     const role = localStorage.getItem("role");
     if (role === "admin")        navigate("/admin");
@@ -498,36 +566,26 @@ export default function Home() {
     else if (role === "user")    navigate("/user/home");
   }, [navigate]);
 
-  // ── STEP 1: build nav items with a placeholder typeValue for dynamic keys ──
-  // We call the hook ONCE with a stable seed, then rebuild after pdfCategoryTypes loads.
-  // To break the circular dependency we pass typeValue from a ref that updates post-render.
   const [resolvedTypeValue, setResolvedTypeValue] = useState(null);
 
-  // ── HOOK CALL ──
+  // ── Hook — stateless about pagination; cursors come from above ──
   const {
-    companies,
-    categories,
-    pdfCategoryTypes,
-    products,
-    pdfs,
-    pagination,
-    loading,
-    error,
-    goNext,
-    goPrevious,
+    companies, categories, pdfCategoryTypes,
+    products, pdfs, pagination, loading, error,
   } = useHomeData({
     filters: {
       category: active.catId,
       sub:      active.subId,
       company:  selectedCompany,
-      // FIX 2: use resolvedTypeValue which covers both fixed and dynamic nav keys
       type:     resolvedTypeValue,
-      // FIX 3: forward activeTab to hook so sorting actually works
       ordering: activeTab === "latest" ? "-created_at" : "-is_featured",
     },
+    productPageUrl,
+    flyerPageUrl,
   });
 
-  // ── STEP 2: build full nav list once pdfCategoryTypes is available ──
+  const pdfResults = pdfs?.results || [];
+
   const pdfNavItems = useMemo(() => {
     if (!pdfCategoryTypes?.length) return FIXED_PDF_NAV;
     const fixedKeys = new Set(FIXED_PDF_NAV.map(n => n.typeValue).filter(Boolean));
@@ -545,51 +603,71 @@ export default function Home() {
     return [...FIXED_PDF_NAV, ...extras];
   }, [pdfCategoryTypes]);
 
-  // ── STEP 3: resolve typeValue from full nav list (FIX 2 — covers dynamic keys) ──
   useEffect(() => {
     const navItem = pdfNavItems.find(n => n.key === activeNav);
     setResolvedTypeValue(navItem ? navItem.typeValue : null);
   }, [pdfNavItems, activeNav]);
 
-  // current nav object for labels / section titles
   const currentPdfNav = useMemo(
     () => pdfNavItems.find(n => n.key === activeNav) ?? pdfNavItems[0],
     [pdfNavItems, activeNav],
   );
 
-  // ── RESET filters when nav changes ──
+  // ── Reset BOTH cursors on tab switch → always lands on page 1 ──
   useEffect(() => {
     setSelectedCompany(null);
     setActive({ catId: null, subId: null });
+    setProductPageUrl(null);
+    setFlyerPageUrl(null);
   }, [activeNav]);
 
-  // ── FIX 4: derive current page from backend pagination URLs ──
-  // This removes the hand-rolled page counter that diverged from the hook's internal state.
-  const page = useMemo(
-    () => derivePageFromPagination(pagination?.next, pagination?.previous),
-    [pagination?.next, pagination?.previous],
+  // ── Reset product cursor when product filters change ──
+  useEffect(() => {
+    setProductPageUrl(null);
+  }, [active.catId, active.subId, selectedCompany, activeTab]);
+
+  // ── Reset flyer cursor when flyer filters change ──
+  useEffect(() => {
+    setFlyerPageUrl(null);
+  }, [resolvedTypeValue, selectedCompany]);
+
+  // ── Pagination source depends on which tab is active ──
+  const paginationSource = showPDFs ? (pdfs || {}) : pagination;
+
+  const page = useMemo(() => {
+    const activeUrl = showPDFs ? flyerPageUrl : productPageUrl;
+    if (!activeUrl) return 1;
+    try {
+      const param = showPDFs ? "flyer_page" : "page";
+      return parseInt(new URL(activeUrl).searchParams.get(param) || "1", 10);
+    } catch (_) {
+      return 1;
+    }
+  }, [showPDFs, flyerPageUrl, productPageUrl]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil((paginationSource?.count || 0) / 10),
   );
 
-  const totalPages = showPDFs
-    ? 1
-    : Math.max(1, Math.ceil((pagination?.count || 0) / 10));
-
-  // ── PAGINATION HANDLERS (FIX 4: no manual setPage, no double-increment) ──
-  const handleNext = () => {
-    if (!pagination?.next) return;
-    goNext();
+  // ── Advance only the relevant cursor ──
+  const handleNext = useCallback(() => {
+    if (!paginationSource?.next) return;
+    if (showPDFs) setFlyerPageUrl(paginationSource.next);
+    else          setProductPageUrl(paginationSource.next);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  }, [paginationSource?.next, showPDFs]);
 
-  const handlePrev = () => {
-    if (!pagination?.previous) return;
-    goPrevious();
+  const handlePrev = useCallback(() => {
+    if (!paginationSource?.previous) return;
+    if (showPDFs) setFlyerPageUrl(paginationSource.previous);
+    else          setProductPageUrl(paginationSource.previous);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  }, [paginationSource?.previous, showPDFs]);
 
-  // ── FORMAT PDFs ──
+  // ── Format PDFs ──
   const formattedPdfs = useMemo(() => {
-    const fromTop = (pdfs || []).map(p => ({
+    const fromTop = (pdfResults || []).map(p => ({
       id:                p.id,
       title:             p.title,
       url:               p.pdf ? p.pdf.replace(/["']/g, "").trim() : null,
@@ -618,25 +696,28 @@ export default function Home() {
     );
 
     const seen = new Set();
-    return [...fromTop, ...fromCompanies].filter(p => {
+    let all = [...fromTop, ...fromCompanies].filter(p => {
       if (seen.has(p.id)) return false;
       seen.add(p.id);
       return true;
     });
-  }, [pdfs, companies]);
+    if (selectedCompany !== null)
+      all = all.filter(p => p.companyId === selectedCompany);
+    if (resolvedTypeValue !== null)
+      all = all.filter(p => p.categoryType?.toLowerCase() === resolvedTypeValue.toLowerCase());
+    return all;
+  }, [pdfs, companies, selectedCompany, resolvedTypeValue]);
 
-  // ── FORMAT PRODUCTS ──
-  const formattedProducts = useMemo(() =>
-    (products || []).map(p => ({
+  // ── Format Products ──
+  const formattedProducts = useMemo(() => {
+    let list = (products || []).map(p => ({
       id:            p.id,
       title:         p.name,
       price:         `QAR ${parseFloat(p.price).toLocaleString("en-QA")}`,
       originalPrice: p.old_price
         ? `QAR ${parseFloat(p.old_price).toLocaleString("en-QA")}` : null,
       discount: p.old_price
-        ? `${Math.round(
-            ((parseFloat(p.old_price) - parseFloat(p.price)) / parseFloat(p.old_price)) * 100
-          )}% OFF`
+        ? `${Math.round(((parseFloat(p.old_price) - parseFloat(p.price)) / parseFloat(p.old_price)) * 100)}% OFF`
         : null,
       image:         p.image          || null,
       categoryId:    p.category_id,
@@ -645,10 +726,12 @@ export default function Home() {
       company:       p.company_name   || "",
       companyId:     p.company_id     || null,
       badge:         p.is_featured    ? "Featured" : null,
-    })),
-  [products]);
+    }));
+    if (selectedCompany !== null)
+      list = list.filter(p => p.companyId === selectedCompany);
+    return list;
+  }, [products, selectedCompany]);
 
-  // ── SIDEBAR CATEGORIES ──
   const sidebarCategories = useMemo(() =>
     (categories || []).map(cat => ({
       id:    cat.id,
@@ -663,10 +746,8 @@ export default function Home() {
     })),
   [categories]);
 
-  // ── ITEMS TO RENDER ──
   const displayItems = showPDFs ? formattedPdfs : formattedProducts;
 
-  // ── SECTION TITLE ──
   const sectionTitle = useMemo(() => {
     if (!showPDFs) {
       if (active.subId !== null) {
@@ -686,55 +767,61 @@ export default function Home() {
       : currentPdfNav.label;
   }, [showPDFs, active, categories, selectedCompany, companies, currentPdfNav]);
 
-  // ── RENDER ──
+  useEffect(() => {
+    document.title = showPDFs
+      ? `${sectionTitle} | Daily Deals Qatar — Flyers & Catalogues`
+      : `${sectionTitle} | Daily Deals Qatar — Products & Offers`;
+    const desc = document.querySelector('meta[name="description"]');
+    if (desc) {
+      desc.content = showPDFs
+        ? `Browse ${sectionTitle} flyers and catalogues. Find the best deals in Qatar.`
+        : `Discover ${sectionTitle} deals and discounts in Qatar. Compare prices and save.`;
+    }
+  }, [sectionTitle, showPDFs]);
+
+  /* ── RENDER ── */
   if (loading) return <><style>{CSS}</style><FullScreenLoader /></>;
 
   if (error) return (
     <>
       <style>{CSS}</style>
-      <div className="full-center">
-        <AlertTriangle size={40} color={R} strokeWidth={1.5} />
-        <p style={{ color: R, marginTop: 14, fontSize: 14 }}>{error}</p>
+      <div className="full-center" role="alert">
+        <AlertTriangle size={40} color={T.red} strokeWidth={1.5} />
+        <p style={{ color: T.red, marginTop: 14, fontSize: 14 }}>{error}</p>
       </div>
     </>
   );
 
   return (
     <>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
       <style>{CSS}</style>
+
       <div className="root">
 
-        {productModal && (
-          <ProductModal product={productModal} onClose={() => setProductModal(null)} />
-        )}
-        {pdfModal && (
-          <PdfModal pdf={pdfModal} onClose={() => setPdfModal(null)} />
-        )}
+        {productModal && <ProductModal product={productModal} onClose={() => setProductModal(null)} />}
+        {pdfModal    && <PdfModal     pdf={pdfModal}         onClose={() => setPdfModal(null)}     />}
 
-        {/* ── Top Nav ── */}
-        <nav className="topnav">
+        {/* ── TOP NAV ── */}
+        <nav className="topnav" aria-label="Main navigation">
           <div className="topnav-inner">
             <button
               className={`navpill navpill-products ${activeNav === PRODUCTS_NAV_KEY ? "active" : ""}`}
-              onClick={() => {
-                setActiveNav(PRODUCTS_NAV_KEY);
-                setActive({ catId: null, subId: null });
-              }}
+              onClick={() => setActiveNav(PRODUCTS_NAV_KEY)}
+              aria-pressed={activeNav === PRODUCTS_NAV_KEY}
             >
               <ShoppingCart size={13} strokeWidth={2} />
               Products
             </button>
 
-            <div className="nav-divider" />
+            <div className="nav-divider" aria-hidden="true" />
 
             {pdfNavItems.map(({ key, label, Icon }) => (
               <button
                 key={key}
                 className={`navpill ${activeNav === key ? "active" : ""}`}
-                onClick={() => {
-                  setActiveNav(key);
-                  setActive({ catId: null, subId: null });
-                }}
+                onClick={() => setActiveNav(key)}
+                aria-pressed={activeNav === key}
               >
                 <Icon size={13} strokeWidth={2} />
                 {label}
@@ -743,12 +830,12 @@ export default function Home() {
           </div>
         </nav>
 
-        {/* ── Top Banner Ad ── */}
+        {/* ── TOP BANNER AD ── */}
         <div className="top-ad-container">
           <AdPlaceholder label="Advertisement · 728×90" />
         </div>
 
-        {/* ── Body ── */}
+        {/* ── BODY ── */}
         <div className="body">
 
           <div className={`sidebar-col ${showPDFs ? "sidebar-col-hidden" : ""}`}>
@@ -759,28 +846,23 @@ export default function Home() {
             />
           </div>
 
-          <div className="main">
+          <main className="main" id="main-content">
 
-            {showPDFs && (
-              <CompanyCarousel
-                companies={companies}
-                selectedCompanyId={selectedCompany}
-                onSelect={setSelectedCompany}
-              />
-            )}
+            <CompanyCarousel
+              companies={companies}
+              selectedCompanyId={selectedCompany}
+              onSelect={setSelectedCompany}
+            />
 
-            {/* Section header */}
             <div className="sec-hdr">
               <div>
-                <div className="sec-title">
+                <h1 className="sec-title">
                   <span className="sec-bold">{sectionTitle}</span>
                   <span className="sec-muted">
-                    {showPDFs
-                      ? " — Flyers & Catalogues · Daily Deals Qatar"
-                      : " — Deals & Offers · Daily Deals Qatar"}
+                    {showPDFs ? " — Flyers & Catalogues" : " — Deals & Offers"}
                   </span>
-                </div>
-                <div className="sec-count" style={{ color: displayItems.length ? MUTED : R }}>
+                </h1>
+                <div className="sec-count">
                   {showPDFs
                     ? `${displayItems.length} flyer${displayItems.length !== 1 ? "s" : ""}`
                     : `${pagination?.count ?? 0} product${(pagination?.count ?? 0) !== 1 ? "s" : ""}${totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""}`
@@ -790,24 +872,28 @@ export default function Home() {
 
               <div className="sec-controls">
                 {!showPDFs && (
-                  <button className="filter-btn" onClick={() => setDrawerOpen(true)}>
+                  <button className="filter-btn" onClick={() => setDrawerOpen(true)}
+                    aria-label="Open categories filter">
                     <SlidersHorizontal size={13} /> Categories
                   </button>
                 )}
-                {showPDFs && selectedCompany !== null && (
-                  <button className="clear-chip" onClick={() => setSelectedCompany(null)}>
+                {selectedCompany !== null && (
+                  <button className="clear-chip" onClick={() => setSelectedCompany(null)}
+                    aria-label="Clear store filter">
                     <X size={11} /> Clear store
                   </button>
                 )}
                 {!showPDFs && (
-                  <div className="tabs">
+                  <div className="tabs" role="tablist" aria-label="Sort products">
                     {[
                       { id: "top",    label: "Top Picks", Icon: TrendingUp },
-                      { id: "latest", label: "Latest",    Icon: Clock },
+                      { id: "latest", label: "Latest",    Icon: Clock      },
                     ].map(({ id, label, Icon }) => (
                       <button
                         key={id}
+                        role="tab"
                         className={`tab ${activeTab === id ? "active" : ""}`}
+                        aria-selected={activeTab === id}
                         onClick={() => setActiveTab(id)}
                       >
                         <Icon size={12} strokeWidth={2} /> {label}
@@ -818,9 +904,9 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Grid */}
             {displayItems.length > 0 ? (
-              <div className="grid">
+              <div className={showPDFs ? "pdf-grid" : "prd-grid"} role="list"
+                aria-label={showPDFs ? "Flyers" : "Products"}>
                 {displayItems.map(item =>
                   showPDFs
                     ? <PDFCard     key={item.id} pdf={item}     onView={p => setPdfModal(p)}         />
@@ -842,35 +928,32 @@ export default function Home() {
               />
             )}
 
-            {/* Pagination — only for products (server-paginated) */}
-            {!showPDFs && (
-              <PaginationBar
-                page={page}
-                total={totalPages}
-                onNext={handleNext}
-                onPrev={handlePrev}
-                hasNext={!!pagination?.next}
-                hasPrev={!!pagination?.previous}
-              />
-            )}
-          </div>
+            <PaginationBar
+              page={page}
+              total={totalPages}
+              onNext={handleNext}
+              onPrev={handlePrev}
+              hasNext={!!paginationSource?.next}
+              hasPrev={!!paginationSource?.previous}
+            />
+          </main>
 
-          <div className="right-ad-col">
+          <aside className="right-ad-col" aria-label="Advertisements">
             <div className="right-ad-container">
               <AdPlaceholder label="Advertisement · 300×250" />
             </div>
             <div className="right-ad-container right-ad-tall" style={{ marginTop: 16 }}>
               <AdPlaceholder label="Advertisement · 300×600" />
             </div>
-          </div>
+          </aside>
         </div>
 
         {/* Mobile drawer */}
         {!showPDFs && drawerOpen && (
-          <div className="overlay" onClick={() => setDrawerOpen(false)} />
+          <div className="overlay" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
         )}
         {!showPDFs && (
-          <div className={`drawer ${drawerOpen ? "open" : ""}`}>
+          <div className={`drawer ${drawerOpen ? "open" : ""}`} aria-hidden={!drawerOpen}>
             <Sidebar
               categories={sidebarCategories}
               active={active}
@@ -885,225 +968,528 @@ export default function Home() {
 }
 
 /* ══════════════════════════════════════════════
-   CSS
+   CSS  (unchanged from original)
 ══════════════════════════════════════════════ */
 const CSS = `
-@keyframes spin     { to { transform: rotate(360deg); } }
-@keyframes fadeIn   { from { opacity:0; } to { opacity:1; } }
-@keyframes slideUp  { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:none; } }
-@keyframes fadeInUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:none; } }
-@keyframes barPulse {
-  0%,100% { transform: scaleY(0.4); opacity: 0.4; }
-  50%      { transform: scaleY(1);   opacity: 1;   }
-}
-@keyframes logoIn {
-  from { opacity:0; transform: scale(0.7) rotate(-10deg); }
-  to   { opacity:1; transform: scale(1) rotate(0deg); }
-}
-@keyframes slideInFromRight {
-  from { opacity: 0; transform: translateX(60px); }
-  to   { opacity: 1; transform: none; }
-}
-@keyframes slideInFromLeft {
-  from { opacity: 0; transform: translateX(-60px); }
-  to   { opacity: 1; transform: none; }
-}
-@keyframes pageFadeIn {
-  from { opacity: 0; } to { opacity: 1; }
-}
-.page-slide-left  { animation: slideInFromRight .26s cubic-bezier(.25,.46,.45,.94) both; }
-.page-slide-right { animation: slideInFromLeft  .26s cubic-bezier(.25,.46,.45,.94) both; }
-.page-fade-in     { animation: pageFadeIn .3s ease both; }
+@keyframes spin        { to { transform: rotate(360deg); } }
+@keyframes fadeIn      { from { opacity:0; } to { opacity:1; } }
+@keyframes slideUp     { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:none; } }
+@keyframes fadeInUp    { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:none; } }
+@keyframes barPulse    { 0%,100% { transform:scaleY(.4); opacity:.4; } 50% { transform:scaleY(1); opacity:1; } }
+@keyframes logoIn      { from { opacity:0; transform:scale(.65) rotate(-12deg); } to { opacity:1; transform:scale(1) rotate(0); } }
+@keyframes cardReveal  { from { opacity:0; transform:translateY(20px) scale(.96); } to { opacity:1; transform:none; } }
+@keyframes urgentPulse { 0%,100% { opacity:1; } 50% { opacity:.6; } }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 button { font-family: inherit; cursor: pointer; }
-a { text-decoration: none; }
+a      { text-decoration: none; }
 
 .root {
-  font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-  background: ${BG}; min-height: 100vh; color: ${DARK};
+  font-family: 'Inter', sans-serif, -apple-system, 'Segoe UI', sans-serif;
+  background: ${T.bg};
+  min-height: 100vh;
+  color: ${T.dark};
 }
 
-.fsloader { position: fixed; inset: 0; background: ${WHITE}; display: flex; align-items: center; justify-content: center; z-index: 9999; animation: fadeIn .2s ease; }
-.fsloader-inner { display: flex; flex-direction: column; align-items: center; gap: 28px; }
-.fsloader-logo  { animation: logoIn .5s cubic-bezier(.34,1.56,.64,1) both; filter: drop-shadow(0 8px 24px rgba(227,6,19,.25)); }
-.fsloader-bars  { display: flex; align-items: center; gap: 5px; height: 36px; }
-.fsloader-bar   { width: 4px; height: 28px; background: ${R}; border-radius: 4px; animation: barPulse .9s ease-in-out infinite; transform-origin: bottom; }
-.fsloader-text  { font-size: 13px; color: ${MUTED}; font-weight: 500; letter-spacing: .02em; animation: fadeInUp .6s .3s ease both; }
+/* ── Loader ── */
+.fsloader       { position:fixed; inset:0; background:${T.white}; display:flex; align-items:center; justify-content:center; z-index:9999; animation:fadeIn .2s; }
+.fsloader-inner { display:flex; flex-direction:column; align-items:center; gap:28px; }
+.fsloader-logo  { animation:logoIn .55s cubic-bezier(.34,1.56,.64,1) both; filter:drop-shadow(0 8px 24px ${T.redGlow}); }
+.fsloader-bars  { display:flex; align-items:center; gap:5px; height:36px; }
+.fsloader-bar   { width:4px; height:28px; background:${T.red}; border-radius:4px; animation:barPulse .9s ease-in-out infinite; transform-origin:bottom; }
+.fsloader-text  { font-size:13px; color:${T.muted}; font-weight:500; letter-spacing:.02em; animation:fadeInUp .5s .25s ease both; }
 
-.topnav { background: ${WHITE}; border-bottom: 1px solid ${BORDER}; position: sticky; top: 0; z-index: 40; box-shadow: 0 1px 10px rgba(0,0,0,.06); }
-.topnav-inner { max-width: 1400px; margin: 0 auto; display: flex; align-items: center; gap: 5px; overflow-x: auto; padding: 10px 20px; scrollbar-width: none; }
-.topnav-inner::-webkit-scrollbar { display: none; }
-.navpill { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 7px 18px; border-radius: 24px; border: 1px solid ${BORDER}; background: ${WHITE}; color: ${DARK}; font-size: 13px; font-weight: 500; white-space: nowrap; transition: all .15s; }
-.navpill:hover      { border-color: ${R}; color: ${R}; }
-.navpill.active     { background: ${R}; border-color: ${R}; color: ${WHITE}; }
-.navpill.active svg { stroke: ${WHITE}; }
-.navpill-products         { border-color: #C8C4BE; background: #FAFAF8; }
-.navpill-products.active  { background: ${DARK}; border-color: ${DARK}; color: ${WHITE}; }
-.nav-divider { flex-shrink: 0; width: 1px; height: 28px; background: ${BORDER}; margin: 0 4px; }
+/* ── Top Nav ── */
+.topnav       { background:${T.white}; border-bottom:1px solid ${T.border}; position:sticky; top:0; z-index:40; box-shadow:0 1px 16px rgba(13,15,20,.06); }
+.topnav-inner { max-width:1400px; margin:0 auto; display:flex; align-items:center; gap:5px; overflow-x:auto; padding:10px 20px; scrollbar-width:none; }
+.topnav-inner::-webkit-scrollbar { display:none; }
 
-.top-ad-container { max-width: 1400px; margin: 16px auto 0; padding: 0 20px; min-height: 90px; background: #F7F7F5; border: 1.5px dashed ${BORDER}; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
-
-.body { max-width: 1400px; margin: 0 auto; padding: 20px 20px 60px; display: flex; gap: 20px; align-items: flex-start; }
-.sidebar-col        { width: 220px; flex-shrink: 0; }
-.sidebar-col-hidden { width: 0 !important; overflow: hidden; }
-.main               { flex: 1; min-width: 0; }
-.right-ad-col       { width: 300px; flex-shrink: 0; }
-.right-ad-container { position: sticky; top: 80px; min-width: 300px; min-height: 250px; background: #F7F7F5; border: 1.5px dashed ${BORDER}; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
-.right-ad-tall { min-height: 600px; }
-
-.sidebar { background: ${WHITE}; border: 1px solid ${BORDER}; border-radius: 14px; padding: 16px 10px; position: sticky; top: 64px; max-height: calc(100vh - 88px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: ${BORDER} transparent; }
-.sidebar-close { position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 16px; color: ${MUTED}; cursor: pointer; }
-.sidebar-heading { font-size: 10px; font-weight: 700; color: ${MUTED}; text-transform: uppercase; letter-spacing: .09em; padding-left: 8px; margin-bottom: 10px; }
-.scat-item { width: 100%; display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 9px; border: none; background: transparent; color: ${DARK}; font-size: 12.5px; font-weight: 500; transition: background .12s; text-align: left; cursor: pointer; }
-.scat-item:hover  { background: ${BG}; }
-.scat-item.active { background: ${RED_BG}; color: ${R}; font-weight: 600; }
-.scat-dot   { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.scat-label { flex: 1; cursor: pointer; }
-.scat-count { font-size: 10px; color: ${MUTED}; background: #EDE9E4; padding: 1px 6px; border-radius: 8px; }
-.scat-badge { font-size: 10px; background: ${R}; color: ${WHITE}; padding: 1px 7px; border-radius: 8px; font-weight: 700; }
-.scat-expand { color: ${MUTED}; display: flex; align-items: center; padding: 2px; cursor: pointer; }
-.scat-subs  { padding: 2px 0 4px 22px; display: flex; flex-direction: column; gap: 1px; }
-.scat-sub { width: 100%; display: flex; align-items: center; gap: 7px; padding: 5px 9px; border-radius: 7px; border: none; background: transparent; font-size: 11.5px; color: #6B6560; cursor: pointer; text-align: left; font-family: inherit; transition: all .12s; }
-.scat-sub:hover  { background: #F0EDE8; color: ${DARK}; }
-.scat-sub.active { background: ${RED_BG}; color: ${R}; font-weight: 600; }
-.sub-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
-
-.carousel { background: ${WHITE}; border: 1px solid ${BORDER}; border-radius: 14px; padding: 10px 12px; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
-.car-wrap  { flex: 1; overflow: hidden; }
-.car-track { display: flex; gap: 8px; transition: transform .35s cubic-bezier(.4,0,.2,1); }
-.car-cell  { flex-shrink: 0; width: 90px; height: 48px; border: 1px solid ${BORDER}; border-radius: 10px; background: ${WHITE}; overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color .15s, transform .15s, box-shadow .15s; }
-.car-cell-all { width: 54px; background: ${BG}; }
-.car-cell:hover               { border-color: ${R}; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,.07); }
-.car-cell-active              { border-color: ${R} !important; box-shadow: 0 0 0 2px ${R}33; }
-.car-cell-all.car-cell-active { background: ${RED_BG}; color: ${R}; }
-.car-initials  { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border-radius: 9px; }
-.car-abbr      { font-size: 14px; font-weight: 700; line-height: 1; }
-.car-fullname  { font-size: 8.5px; font-weight: 500; opacity: 0.65; }
-.car-arrow { width: 30px; height: 30px; border-radius: 50%; border: 1px solid ${BORDER}; background: ${WHITE}; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: ${DARK}; transition: all .14s; cursor: pointer; }
-.car-arrow:hover:not(:disabled) { border-color: ${R}; color: ${R}; }
-.car-arrow:disabled              { opacity: 0.3; cursor: default; }
-
-.sec-hdr { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
-.sec-title    { font-size: 15px; line-height: 1.4; }
-.sec-bold     { font-weight: 700; color: ${DARK}; }
-.sec-muted    { font-weight: 400; color: ${MUTED}; }
-.sec-count    { font-size: 12px; margin-top: 3px; }
-.sec-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.filter-btn { display: none; align-items: center; gap: 6px; padding: 7px 13px; background: ${WHITE}; border: 1px solid ${BORDER}; border-radius: 9px; font-size: 12.5px; font-weight: 500; color: ${DARK}; transition: all .13s; cursor: pointer; }
-.filter-btn:hover { border-color: ${R}; color: ${R}; }
-.clear-chip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 9px; border: 1px solid ${R}; background: ${RED_BG}; color: ${R}; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .14s; }
-.clear-chip:hover { background: ${R}; color: ${WHITE}; }
-.tabs { display: flex; border: 1px solid ${BORDER}; border-radius: 10px; overflow: hidden; background: ${WHITE}; }
-.tab { display: inline-flex; align-items: center; gap: 5px; padding: 7px 15px; border: none; background: transparent; font-size: 12.5px; font-weight: 600; color: ${MUTED}; transition: all .15s; white-space: nowrap; cursor: pointer; }
-.tab:first-child        { border-right: 1px solid ${BORDER}; }
-.tab.active             { background: ${R}; color: ${WHITE}; }
-.tab.active svg         { stroke: ${WHITE}; }
-.tab:not(.active):hover { background: ${BG}; color: ${DARK}; }
-
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
-
-.pcard { background: ${WHITE}; border: 1px solid ${BORDER}; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; cursor: pointer; position: relative; transition: transform .2s, box-shadow .2s, border-color .2s; animation: fadeInUp .35s ease both; }
-.pcard:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(0,0,0,.09); border-color: #D0CECA; }
-.pcard-badge { position: absolute; top: 9px; left: 9px; z-index: 2; font-size: 9.5px; font-weight: 700; padding: 3px 9px; border-radius: 12px; letter-spacing: .02em; }
-.pcard-img   { height: 165px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
-.pcard-thumb-fallback { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity .3s ease; }
-.pcard-thumb-pdf { position: absolute; inset: 0; z-index: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; transition: opacity .3s ease; }
-.pcard-thumb-pdf .react-pdf__Document { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
-.pcard-thumb-pdf .react-pdf__Page     { overflow: hidden; }
-.pcard-thumb-pdf .react-pdf__Page__canvas { display: block; width: 100% !important; height: auto !important; }
-.pcard-img-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; }
-.pcard-img-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .2s; z-index: 3; }
-.pcard:hover .pcard-img-overlay { opacity: 1; }
-.pcard-body    { padding: 11px 12px 12px; display: flex; flex-direction: column; flex: 1; }
-.pcard-title   { font-size: 13px; font-weight: 600; color: ${DARK}; line-height: 1.35; margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.pcard-pricing { display: flex; align-items: baseline; gap: 7px; margin-bottom: 7px; }
-.pcard-price   { font-size: 15px; font-weight: 700; color: ${DARK}; }
-.pcard-orig    { font-size: 11px; color: ${MUTED}; text-decoration: line-through; }
-.pcard-discount { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 8px; margin-bottom: 10px; align-self: flex-start; }
-.pcard-footer  { display: flex; align-items: center; gap: 8px; margin-top: auto; }
-.pcard-company { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
-.pcard-avatar  { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 700; flex-shrink: 0; overflow: hidden; }
-.pcard-cname   { font-size: 11px; color: ${MUTED}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pcard-btn     { flex-shrink: 0; padding: 5px 12px; color: ${WHITE}; border: none; border-radius: 7px; font-size: 11px; font-weight: 700; transition: opacity .14px; letter-spacing: .02em; cursor: pointer; }
-.pcard-btn:hover { opacity: 0.85; }
-
-/* FIX 1: gap added so chevron icon and label don't overlap */
-.pagination { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 24px 0 8px; flex-wrap: wrap; }
-.pg-btn { min-width: 36px; height: 36px; border-radius: 9px; border: 1px solid ${BORDER}; background: ${WHITE}; color: ${DARK}; font-size: 13px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 14px; transition: all .15s; cursor: pointer; }
-.pg-btn:hover:not(:disabled) { border-color: ${R}; color: ${R}; }
-.pg-btn:disabled              { opacity: 0.35; cursor: default; }
-.pg-btn.active                { background: ${R}; border-color: ${R}; color: ${WHITE}; }
-.pg-ellipsis { font-size: 13px; color: ${MUTED}; padding: 0 2px; line-height: 36px; }
-
-.empty { text-align: center; padding: 72px 20px; display: flex; flex-direction: column; align-items: center; animation: fadeInUp .3s ease both; }
-.empty-icon  { margin-bottom: 16px; }
-.empty-title { font-size: 15px; font-weight: 600; color: ${DARK}; }
-.empty-sub   { font-size: 12.5px; color: ${MUTED}; margin-top: 5px; }
-
-.spinner { display: inline-block; width: 24px; height: 24px; border: 2.5px solid #FFD6D6; border-top-color: ${R}; border-radius: 50%; animation: spin .7s linear infinite; }
-.spinner.lg { width: 40px; height: 40px; border-width: 3px; }
-.full-center { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; }
-
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn .2s ease; }
-.modal-box { background: ${WHITE}; border-radius: 18px; width: 100%; max-width: 520px; overflow: hidden; position: relative; animation: slideUp .25s ease; max-height: 90vh; display: flex; flex-direction: column; }
-.modal-pdf-box  { max-width: 900px; height: 92vh; }
-.modal-close { position: absolute; top: 14px; right: 14px; width: 32px; height: 32px; border-radius: 50%; border: 1px solid ${BORDER}; background: ${WHITE}; display: flex; align-items: center; justify-content: center; color: ${MUTED}; transition: all .14s; cursor: pointer; z-index: 2; }
-.modal-close:hover { border-color: ${R}; color: ${R}; }
-.modal-img-wrap { height: 280px; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; }
-.modal-body     { padding: 20px 24px 24px; overflow-y: auto; }
-.modal-title    { font-size: 17px; font-weight: 700; color: ${DARK}; line-height: 1.35; }
-.modal-pricing  { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
-.modal-price    { font-size: 22px; font-weight: 700; color: ${DARK}; }
-.modal-orig     { font-size: 14px; color: ${MUTED}; text-decoration: line-through; }
-.modal-meta     { display: flex; gap: 20px; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid ${BORDER}; }
-.modal-pdf-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 14px; border-bottom: 1px solid ${BORDER}; gap: 12px; flex-shrink: 0; }
-.modal-pdf-viewer { flex: 1; overflow: hidden; min-height: 0; display: flex; flex-direction: column; }
-.modal-action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 9px; border: 1px solid ${BORDER}; background: ${WHITE}; color: ${DARK}; font-size: 12px; font-weight: 500; transition: all .14s; cursor: pointer; font-family: inherit; }
-.modal-action-btn:hover { border-color: ${R}; color: ${R}; }
-.zoom-btn { padding: 6px 10px !important; }
-.pdf-state-center { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 14px; padding: 32px; text-align: center; }
-.pdf-nav-bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; border-top: 1px solid ${BORDER}; background: ${WHITE}; flex-shrink: 0; gap: 12px; }
-.pdf-nav-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 18px; border-radius: 10px; border: 1px solid ${BORDER}; background: ${WHITE}; color: ${DARK}; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; font-family: inherit; }
-.pdf-nav-btn:hover:not(:disabled) { border-color: ${R}; color: ${R}; background: ${RED_BG}; }
-.pdf-nav-btn:disabled { opacity: 0.32; cursor: default; }
-.pdf-page-indicator { display: flex; align-items: center; justify-content: center; flex: 1; }
-.pdf-pips { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; justify-content: center; max-width: 320px; }
-.pip { width: 8px; height: 8px; border-radius: 50%; border: none; background: ${BORDER}; cursor: pointer; padding: 0; transition: all .18s; flex-shrink: 0; }
-.pip:hover  { background: #B0AAA2; transform: scale(1.3); }
-.pip-active { background: ${R} !important; transform: scale(1.35); }
-.modal-pdf-viewer ::-webkit-scrollbar       { width: 7px; height: 7px; }
-.modal-pdf-viewer ::-webkit-scrollbar-track { background: #F0EDE8; border-radius: 4px; }
-.modal-pdf-viewer ::-webkit-scrollbar-thumb { background: #C0BAB2; border-radius: 4px; }
-.modal-pdf-viewer ::-webkit-scrollbar-thumb:hover { background: #9E9890; }
-.react-pdf__Page { background: white !important; box-shadow: 0 2px 16px rgba(0,0,0,.14); }
-.react-pdf__Page__canvas { max-width: 100%; height: auto !important; display: block; }
-
-.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 50; }
-.drawer { position: fixed; top: 0; left: 0; bottom: 0; width: 275px; background: ${WHITE}; z-index: 60; padding: 20px 14px; overflow-y: auto; transform: translateX(-100%); transition: transform .3s cubic-bezier(.4,0,.2,1); box-shadow: 4px 0 24px rgba(0,0,0,.13); }
-.drawer.open { transform: translateX(0); }
-
-@media (max-width: 960px) {
-  .sidebar-col  { display: none !important; }
-  .right-ad-col { display: none; }
-  .filter-btn   { display: inline-flex; }
-  .top-ad-container { min-height: 70px; }
+.navpill {
+  display:inline-flex; align-items:center; gap:6px; flex-shrink:0;
+  padding:8px 17px; border-radius:100px; border:1.5px solid ${T.border};
+  background:${T.white}; color:${T.slate}; font-size:12.5px; font-weight:700;
+  white-space:nowrap; transition:all .18s cubic-bezier(.4,0,.2,1);
+  font-family:'Inter', sans-serif; letter-spacing:.01em;
 }
-@media (max-width: 680px) {
-  .body { padding: 14px 12px 40px; }
-  .grid { grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 10px; }
-  .sec-hdr { flex-direction: column; align-items: flex-start; }
-  .car-cell { width: 74px; height: 42px; }
-  .car-abbr { font-size: 12px; }
-  .pcard-img { height: 140px; }
-  .top-ad-container { min-height: 60px; margin: 10px 12px 0; padding: 0; }
-  .modal-box     { border-radius: 14px; }
-  .modal-pdf-box { height: 96vh; border-radius: 0; }
-  .carousel-label { display: none; }
-  .pdf-nav-btn span { display: none; }
-  .pdf-nav-btn { padding: 7px 11px; }
+.navpill:hover            { border-color:${T.red}; color:${T.red}; background:${T.redLight}; transform:translateY(-1px); }
+.navpill.active           { background:${T.red}; border-color:${T.red}; color:${T.white}; box-shadow:0 4px 14px ${T.redGlow}; }
+.navpill-products         { border-color:${T.border}; background:${T.bgCard}; }
+.navpill-products.active  { background:${T.dark}; border-color:${T.dark}; color:${T.white}; box-shadow:0 4px 14px rgba(13,15,20,.25); }
+.nav-divider              { flex-shrink:0; width:1px; height:28px; background:${T.border}; margin:0 4px; }
+
+/* ── Banner Ad ── */
+.top-ad-container {
+  max-width:1400px; margin:16px auto 0; padding:0 20px;
+  min-height:90px; background:${T.white};
+  border:1.5px dashed ${T.border}; border-radius:16px;
+  display:flex; align-items:center; justify-content:center;
 }
-@media (max-width: 400px) {
-  .grid { grid-template-columns: repeat(2, 1fr); }
+
+/* ── Layout ── */
+.body         { max-width:1400px; margin:0 auto; padding:20px 20px 60px; display:flex; gap:20px; align-items:flex-start; }
+.sidebar-col  { width:240px; flex-shrink:0; }
+.sidebar-col-hidden { width:0 !important; overflow:hidden; }
+.main         { flex:1; min-width:0; }
+.right-ad-col { width:300px; flex-shrink:0; }
+.right-ad-container { position:sticky; top:80px; min-width:300px; min-height:250px; background:${T.white}; border:1.5px dashed ${T.border}; border-radius:16px; display:flex; align-items:center; justify-content:center; }
+.right-ad-tall { min-height:600px; }
+
+/* ── Sidebar ── */
+.sidebar {
+  background:${T.white}; border:1.5px solid ${T.border};
+  border-radius:20px; padding:18px 14px;
+  position:sticky; top:72px;
+  max-height:calc(100vh - 96px); overflow-y:auto;
+  scrollbar-width:thin; scrollbar-color:${T.border} transparent;
 }
+.sidebar-close {
+  position:absolute; top:12px; right:12px;
+  background:none; border:none; color:${T.muted};
+  display:flex; padding:4px; border-radius:8px;
+  transition:color .15s; cursor:pointer;
+}
+.sidebar-close:hover { color:${T.red}; }
+.sidebar-heading {
+  display:flex; align-items:center; gap:8px;
+  font-family: 'Poppins', sans-serif;
+  font-size:11px; font-weight:600; color:${T.dark};
+  text-transform:uppercase; letter-spacing:.1em;
+  padding-bottom:14px; border-bottom:1.5px solid ${T.borderLight};
+  margin-bottom:14px;
+}
+.scat-item {
+  width:100%; display:flex; align-items:center; gap:9px;
+  padding:9px 11px; border:none; background:transparent;
+  border-radius:11px; font-size:13px; font-weight:600;
+  color:${T.charcoal}; cursor:pointer;
+  transition:all .18s; margin-bottom:2px;
+  font-family:'Inter', sans-serif; text-align:left;
+}
+.scat-item:hover  { background:${T.bg}; }
+.scat-item.active { background:${T.redLight} !important; color:${T.red}; }
+.scat-dot   { width:7px; height:7px; border-radius:50%; flex-shrink:0; transition:background .15s; }
+.scat-label { flex:1; cursor:pointer; }
+.scat-count { font-style:normal; font-size:10.5px; color:${T.muted}; background:${T.borderLight}; padding:2px 8px; border-radius:8px; margin-left:auto; }
+.scat-badge { font-size:10px; background:${T.red}; color:${T.white}; padding:1px 7px; border-radius:8px; font-weight:700; }
+.scat-expand { color:${T.muted}; display:flex; align-items:center; padding:2px; cursor:pointer; }
+.scat-subs  { padding:2px 0 4px 22px; display:flex; flex-direction:column; gap:1px; }
+.scat-sub {
+  width:100%; display:flex; align-items:center; gap:7px;
+  padding:6px 9px; border-radius:8px; border:none; background:transparent;
+  font-size:12px; color:${T.muted}; cursor:pointer; text-align:left;
+  font-family:inherit; transition:all .15s;
+}
+.scat-sub:hover  { background:${T.bg}; color:${T.dark}; }
+.scat-sub.active { background:${T.redLight}; color:${T.red}; font-weight:700; }
+.sub-dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; transition:background .15s; }
+
+/* ── Company Carousel ── */
+.co-carousel {
+  background:${T.white}; border:1.5px solid ${T.border};
+  border-radius:20px; padding:12px 14px;
+  margin-bottom:20px; display:flex; align-items:center; gap:8px;
+}
+.co-wrap  { flex:1; overflow:hidden; }
+.co-track { display:flex; gap:8px; transition:transform .32s cubic-bezier(.4,0,.2,1); }
+
+.co-pill {
+  display:inline-flex; align-items:center; gap:8px; flex-shrink:0;
+  padding:7px 16px 7px 8px; border-radius:100px;
+  border:1.5px solid ${T.border}; background:${T.white};
+  color:${T.slate}; font-size:12.5px; font-weight:700;
+  white-space:nowrap; cursor:pointer;
+  transition:all .2s; font-family:'Inter', sans-serif;
+}
+.co-pill:hover { border-color:${T.red}; color:${T.red}; transform:translateY(-2px); box-shadow:0 4px 12px ${T.redGlow}; }
+.co-pill-on   { background:${T.red}; border-color:${T.red}; color:${T.white}; box-shadow:0 4px 14px ${T.redGlow}; transform:translateY(-2px); }
+.co-pill-all  { padding:7px 16px; }
+
+.co-pill-avatar {
+  width:26px; height:26px; border-radius:50%;
+  overflow:hidden; flex-shrink:0; display:flex;
+  align-items:center; justify-content:center;
+  font-size:9px; font-weight:800;
+  font-family:'Poppins', sans-serif;
+}
+.co-pill-avatar img  { width:100%; height:100%; object-fit:contain; }
+.co-pill-on .co-pill-avatar { background:rgba(255,255,255,.22); color:${T.white}; }
+
+.co-nav-btn {
+  flex-shrink:0; width:34px; height:34px; border-radius:50%;
+  border:1.5px solid ${T.border}; background:${T.white};
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; color:${T.charcoal}; transition:all .18s;
+}
+.co-nav-btn:hover:not(:disabled) { background:${T.red}; border-color:${T.red}; color:${T.white}; }
+.co-nav-btn:disabled { opacity:.3; cursor:default; }
+
+/* ── Section header ── */
+.sec-hdr { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; gap:12px; flex-wrap:wrap; }
+.sec-title { font-size:15px; line-height:1.4; }
+.sec-bold  { font-weight:700; color:${T.dark}; font-family:'Poppins', sans-serif; font-size:18px; }
+.sec-muted { font-weight:400; color:${T.muted}; font-size:13px; }
+.sec-count { font-size:12px; margin-top:4px; color:${T.muted}; font-family:'Inter', sans-serif; }
+.sec-controls  { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.filter-btn    { display:none; align-items:center; gap:6px; padding:8px 14px; background:${T.white}; border:1.5px solid ${T.border}; border-radius:12px; font-size:13px; font-weight:700; color:${T.red}; transition:all .15s; cursor:pointer; font-family:inherit; }
+.filter-btn:hover { border-color:${T.red}; background:${T.redLight}; }
+.clear-chip { display:inline-flex; align-items:center; gap:5px; padding:7px 13px; border-radius:100px; border:1.5px solid ${T.red}; background:${T.redLight}; color:${T.red}; font-size:12px; font-weight:700; cursor:pointer; transition:all .15s; font-family:inherit; }
+.clear-chip:hover { background:${T.red}; color:${T.white}; }
+.tabs { display:flex; border:1.5px solid ${T.border}; border-radius:12px; overflow:hidden; background:${T.white}; }
+.tab  { display:inline-flex; align-items:center; gap:5px; padding:7px 16px; border:none; background:transparent; font-size:12.5px; font-weight:700; color:${T.muted}; transition:all .15s; white-space:nowrap; cursor:pointer; font-family:inherit; }
+.tab:first-child        { border-right:1.5px solid ${T.border}; }
+.tab.active             { background:${T.red}; color:${T.white}; }
+.tab:not(.active):hover { background:${T.bg}; color:${T.dark}; }
+
+/* ══════════════════════════════════
+   PDF MAGAZINE GRID & CARD
+══════════════════════════════════ */
+.pdf-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));
+  gap:20px;
+}
+
+.pdf-mag-card {
+  position:relative; border-radius:22px; overflow:hidden;
+  cursor:pointer; background:${T.darkMid};
+  aspect-ratio:3/4.2;
+  transition:transform .35s cubic-bezier(.2,.9,.4,1.1), box-shadow .35s;
+  box-shadow:0 4px 20px rgba(0,0,0,.1);
+  opacity:0;
+}
+.pdf-mag-visible {
+  animation:cardReveal .42s cubic-bezier(.34,1,.64,1) both;
+  opacity:1;
+}
+.pdf-mag-card:hover {
+  transform:translateY(-10px) rotate(-0.5deg) scale(1.015);
+  box-shadow:0 30px 60px rgba(0,0,0,.22), 0 10px 20px rgba(0,0,0,.1);
+}
+
+.pdf-mag-visual { position:absolute; inset:0; display:flex; flex-direction:column; }
+
+.pdf-mag-bg { position:absolute; inset:0; z-index:0; }
+
+.pdf-mag-thumb-outer { position:absolute; inset:0; z-index:2; overflow:hidden; }
+.pdf-mag-fallback {
+  position:absolute; inset:0; z-index:1;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:10px;
+  transition:opacity .4s ease;
+}
+.pdf-fallback-label {
+  font-size:11px; font-weight:600; color:${T.dark};
+  line-height:1.3; text-align:center; padding:0 12px;
+  display:-webkit-box; -webkit-line-clamp:2;
+  -webkit-box-orient:vertical; overflow:hidden; opacity:.7;
+}
+.pdf-spin {
+  width:26px; height:26px; border-radius:50%;
+  border:3px solid rgba(0,0,0,.1);
+  animation:spin .75s linear infinite;
+}
+.pdf-mag-doc {
+  position:absolute; inset:0; z-index:2;
+  display:flex; align-items:flex-start; justify-content:center;
+  overflow:hidden; transition:opacity .4s ease;
+}
+.pdf-mag-doc .react-pdf__Document { width:100%; }
+.pdf-mag-doc .react-pdf__Page__canvas { width:100% !important; height:auto !important; display:block; }
+
+.pdf-mag-icon-fallback { position:absolute; inset:0; z-index:1; display:flex; align-items:center; justify-content:center; opacity:.5; }
+
+.pdf-mag-gradient {
+  position:absolute; inset:0; z-index:3;
+  background:
+    linear-gradient(to bottom,
+      rgba(0,0,0,.55) 0%,
+      transparent 35%,
+      transparent 50%,
+      rgba(0,0,0,.78) 100%
+    );
+}
+
+.pdf-mag-top {
+  position:absolute; top:12px; left:12px; right:12px; z-index:4;
+  display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
+}
+.pdf-mag-badge {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:5px 11px; border-radius:100px;
+  font-size:9px; font-weight:800; text-transform:uppercase;
+  letter-spacing:.07em; color:${T.white};
+  font-family:'Poppins', sans-serif;
+  box-shadow:0 2px 10px rgba(0,0,0,.3);
+}
+.pdf-mag-urgent {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:4px 10px; border-radius:100px;
+  background:rgba(255,200,0,.92); color:#000;
+  font-size:9px; font-weight:800;
+  font-family:'Poppins', sans-serif; letter-spacing:.04em;
+  animation:urgentPulse 1.5s ease-in-out infinite; flex-shrink:0;
+}
+
+.pdf-mag-bottom  { position:absolute; bottom:0; left:0; right:0; z-index:4; padding:18px 16px 16px; }
+.pdf-mag-co-row  { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.pdf-mag-co-img  { width:22px; height:22px; border-radius:6px; object-fit:cover; border:1.5px solid rgba(255,255,255,.4); }
+.pdf-mag-co-dot  { width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:${T.white}; font-size:11px; font-weight:800; font-family:'Poppins', sans-serif; border:1.5px solid rgba(255,255,255,.4); }
+.pdf-mag-co-name { font-size:11px; font-weight:600; color:rgba(255,255,255,.75); font-family:'Inter', sans-serif; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pdf-mag-title   {
+  font-family:'Poppins', sans-serif;
+  font-size:15px; font-weight:600; color:${T.white};
+  line-height:1.35; margin-bottom:10px;
+  display:-webkit-box; -webkit-line-clamp:2;
+  -webkit-box-orient:vertical; overflow:hidden;
+  text-shadow:0 1px 4px rgba(0,0,0,.4);
+}
+.pdf-mag-meta-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.pdf-mag-date {
+  display:flex; align-items:center; gap:5px;
+  font-size:10px; color:rgba(255,255,255,.6);
+  font-family:'Inter', sans-serif;
+}
+.pdf-mag-view-cta {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:5px 14px; border-radius:100px;
+  font-size:10.5px; font-weight:800; color:${T.white};
+  font-family:'Poppins', sans-serif; letter-spacing:.04em;
+  box-shadow:0 3px 12px rgba(0,0,0,.25); transition:transform .2s;
+}
+.pdf-mag-card:hover .pdf-mag-view-cta { transform:scale(1.06); }
+
+/* ══════════════════════════════════
+   PRODUCT GRID & CARD
+══════════════════════════════════ */
+.prd-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(185px, 1fr));
+  gap:18px;
+}
+
+.prd-card {
+  background:${T.white}; border-radius:20px;
+  border:1.5px solid ${T.border}; overflow:hidden;
+  cursor:pointer;
+  transition:transform .3s cubic-bezier(.2,.9,.4,1.1), box-shadow .3s, border-color .2s;
+}
+.prd-card:hover {
+  transform:translateY(-6px);
+  box-shadow:0 20px 40px rgba(13,15,20,.09), 0 4px 12px rgba(13,15,20,.06);
+  border-color:${T.subtle};
+}
+.prd-img-wrap {
+  position:relative; width:100%; aspect-ratio:1;
+  background:${T.bg}; overflow:hidden;
+}
+.prd-img-wrap img {
+  width:100%; height:100%; object-fit:cover;
+  transition:transform .45s cubic-bezier(.2,.9,.4,1.05);
+}
+.prd-card:hover .prd-img-wrap img { transform:scale(1.07); }
+.prd-img-ph {
+  width:100%; height:100%; display:flex;
+  align-items:center; justify-content:center; background:${T.bg};
+}
+.prd-shine {
+  position:absolute; inset:0;
+  background:linear-gradient(135deg, rgba(255,255,255,.18) 0%, transparent 50%);
+  pointer-events:none;
+}
+.prd-discount {
+  position:absolute; top:10px; left:10px;
+  display:inline-flex; align-items:center; gap:4px;
+  background:${T.success}; color:${T.white};
+  padding:4px 10px; border-radius:8px;
+  font-size:9.5px; font-weight:800; z-index:1;
+  font-family:'Poppins', sans-serif; letter-spacing:.04em;
+  box-shadow:0 2px 8px rgba(0,196,140,.35);
+}
+.prd-badge {
+  position:absolute; bottom:10px; left:10px;
+  display:inline-flex; align-items:center;
+  color:${T.white}; padding:4px 10px; border-radius:8px;
+  font-size:9.5px; font-weight:800; z-index:1;
+  font-family:'Poppins', sans-serif; letter-spacing:.04em;
+}
+.prd-body    { padding:14px; }
+.prd-name    { font-family:'Inter', sans-serif; font-size:13px; font-weight:700; color:${T.dark}; margin-bottom:8px; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.prd-price-row { display:flex; align-items:baseline; gap:8px; margin-bottom:8px; }
+.prd-price   { font-family:'Poppins', sans-serif; font-size:16px; font-weight:700; color:${T.red}; }
+.prd-old     { font-size:12px; color:${T.muted}; text-decoration:line-through; }
+.prd-company { display:flex; align-items:center; gap:5px; font-size:11px; color:${T.muted}; font-family:'Inter', sans-serif; }
+
+/* ── Empty state ── */
+.empty-state { grid-column:1/-1; text-align:center; padding:80px 20px; }
+.empty-icon  { width:72px; height:72px; margin:0 auto 18px; background:${T.white}; border:1.5px solid ${T.border}; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+.empty-title { font-family:'Poppins', sans-serif; font-size:17px; font-weight:600; color:${T.dark}; margin-bottom:6px; }
+.empty-sub   { font-size:13px; color:${T.muted}; }
+
+/* ── Pagination ── */
+.pagination { display:flex; align-items:center; justify-content:center; gap:6px; padding:28px 0 8px; flex-wrap:wrap; }
+.pg-btn {
+  min-width:36px; height:38px; border-radius:12px;
+  border:1.5px solid ${T.border}; background:${T.white};
+  color:${T.dark}; font-size:13px; font-weight:700;
+  display:inline-flex; align-items:center; gap:6px; padding:0 16px;
+  transition:all .15s; cursor:pointer; font-family:inherit;
+}
+.pg-btn:hover:not(:disabled) { border-color:${T.red}; color:${T.red}; background:${T.redLight}; }
+.pg-btn:disabled              { opacity:.35; cursor:default; }
+
+/* ── Utility ── */
+.full-center { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; }
+
+/* ── Mobile drawer ── */
+.overlay { position:fixed; inset:0; background:${T.overlay}; z-index:50; animation:fadeIn .2s; }
+.drawer  {
+  position:fixed; top:0; left:0; bottom:0;
+  width:280px; background:${T.white}; z-index:60;
+  padding:20px 14px; overflow-y:auto;
+  transform:translateX(-100%);
+  transition:transform .3s cubic-bezier(.4,0,.2,1);
+  box-shadow:6px 0 32px rgba(0,0,0,.12);
+}
+.drawer.open { transform:translateX(0); }
+
+/* ══════════════════════════════════
+   MODALS
+══════════════════════════════════ */
+.modal-overlay {
+  position:fixed; inset:0;
+  background:${T.overlay};
+  z-index:100;
+  display:flex; align-items:center; justify-content:center;
+  padding:20px;
+  animation:fadeIn .2s ease;
+}
+.modal-box {
+  background:${T.white};
+  border-radius:22px;
+  width:100%; max-width:520px;
+  overflow:hidden; position:relative;
+  animation:slideUp .25s ease;
+  max-height:90vh;
+  display:flex; flex-direction:column;
+  border:1.5px solid ${T.border};
+  box-shadow:0 32px 80px rgba(13,15,20,.22), 0 8px 24px rgba(13,15,20,.12);
+}
+.modal-pdf-box {
+  max-width:900px;
+  height:92vh;
+}
+.modal-close {
+  position:absolute; top:14px; right:14px;
+  width:34px; height:34px; border-radius:50%;
+  border:1.5px solid ${T.border};
+  background:${T.white};
+  display:flex; align-items:center; justify-content:center;
+  color:${T.muted}; cursor:pointer;
+  transition:all .15s; z-index:10;
+}
+.modal-close:hover { border-color:${T.red}; color:${T.red}; background:${T.redLight}; }
+.modal-img-wrap {
+  height:280px;
+  display:flex; align-items:center; justify-content:center;
+  overflow:hidden; flex-shrink:0;
+  background:${T.bg};
+}
+.modal-img-wrap img { width:100%; height:100%; object-fit:cover; }
+.modal-body { padding:22px 26px 28px; overflow-y:auto; }
+.modal-title {
+  font-family:'Poppins', sans-serif;
+  font-size:18px; font-weight:600;
+  color:${T.dark}; line-height:1.35;
+  margin-bottom:14px;
+}
+.modal-pricing { display:flex; align-items:baseline; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+.modal-price   { font-family:'Poppins', sans-serif; font-size:24px; font-weight:700; color:${T.red}; }
+.modal-orig    { font-size:14px; color:${T.muted}; text-decoration:line-through; }
+.modal-meta    { display:flex; gap:20px; flex-wrap:wrap; padding-top:14px; border-top:1.5px solid ${T.border}; }
+.modal-pdf-header {
+  display:flex; align-items:center;
+  justify-content:space-between;
+  padding:16px 22px 14px;
+  border-bottom:1.5px solid ${T.border};
+  gap:12px; flex-shrink:0;
+}
+.modal-pdf-viewer { flex:1; overflow:hidden; min-height:0; display:flex; flex-direction:column; }
+.modal-action-btn {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:8px 16px; border-radius:12px;
+  border:1.5px solid ${T.border};
+  background:${T.white}; color:${T.dark};
+  font-size:12.5px; font-weight:700;
+  transition:all .15s; cursor:pointer;
+  font-family:'Inter', sans-serif;
+}
+.modal-action-btn:hover { border-color:${T.red}; color:${T.red}; background:${T.redLight}; }
+.pdf-nav-bar {
+  display:flex; align-items:center;
+  justify-content:space-between;
+  padding:11px 22px;
+  border-top:1.5px solid ${T.border};
+  background:${T.white}; flex-shrink:0; gap:12px;
+}
+.pdf-nav-btn {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:8px 20px; border-radius:12px;
+  border:1.5px solid ${T.border};
+  background:${T.white}; color:${T.dark};
+  font-size:13px; font-weight:700;
+  cursor:pointer; transition:all .15s;
+  font-family:'Inter', sans-serif;
+}
+.pdf-nav-btn:hover:not(:disabled) { border-color:${T.red}; color:${T.red}; background:${T.redLight}; }
+.pdf-nav-btn:disabled { opacity:.32; cursor:default; }
+.pdf-pips { display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:center; max-width:320px; }
+.pip {
+  width:8px; height:8px; border-radius:50%;
+  border:none; background:${T.border};
+  cursor:pointer; padding:0;
+  transition:all .18s; flex-shrink:0;
+}
+.pip:hover  { background:${T.subtle}; transform:scale(1.3); }
+.pip-active { background:${T.red} !important; transform:scale(1.35); }
+.react-pdf__Page { background:${T.white} !important; box-shadow:0 2px 16px rgba(0,0,0,.12); }
+.react-pdf__Page__canvas { max-width:100%; height:auto !important; display:block; }
+
+/* ── Responsive ── */
+@media (max-width:1100px) {
+  .sidebar-col  { width:210px; }
+  .right-ad-col { display:none; }
+}
+@media (max-width:960px) {
+  .sidebar-col  { display:none !important; }
+  .filter-btn   { display:inline-flex; }
+  .top-ad-container { min-height:70px; }
+}
+@media (max-width:680px) {
+  .body       { padding:14px 14px 40px; }
+  .pdf-grid   { grid-template-columns:repeat(2, 1fr); gap:12px; }
+  .prd-grid   { grid-template-columns:repeat(2, 1fr); gap:12px; }
+  .pdf-mag-card { aspect-ratio:3/4.5; border-radius:16px; }
+  .pdf-mag-title { font-size:13px; }
+  .pdf-mag-co-name { display:none; }
+  .sec-hdr    { flex-direction:column; align-items:flex-start; }
+  .co-pill span { display:none; }
+  .co-pill    { padding:7px 10px; }
+  .co-pill-all span { display:inline; }
+  .modal-box     { border-radius:18px; }
+  .modal-pdf-box { height:96vh; border-radius:0; border:none; }
+  .pdf-nav-btn span { display:none; }
+  .pdf-nav-btn { padding:8px 13px; }
+  .modal-body  { padding:16px 18px 22px; }
+  .modal-img-wrap { height:220px; }
+}
+@media (max-width:420px) {
+  .body     { padding:10px 10px 40px; }
+  .pdf-grid { grid-template-columns:repeat(2, 1fr); gap:10px; }
+  .prd-grid { grid-template-columns:repeat(2, 1fr); gap:10px; }
+  .co-carousel { padding:10px 10px; }
+}
+
+/* ── Focus accessibility ── */
+:focus-visible { outline:2px solid ${T.red}; outline-offset:2px; }
+button:focus:not(:focus-visible) { outline:none; }
 `;

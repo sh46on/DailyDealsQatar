@@ -4,7 +4,6 @@ import UserLayout from "./UserLayout";
 import { getImageUrl } from "../api/media";
 
 const STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Nunito:wght@300;400;500;600;700&display=swap');
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -35,7 +34,7 @@ const STYLES = `
     min-height: 100vh;
     background: linear-gradient(160deg, #fdf5f6 0%, #f5eaec 50%, #fdf5f6 100%);
     padding: 40px 20px 64px;
-    font-family: 'Nunito', sans-serif;
+    font-family: 'Cabinet Grotesk', sans-serif;
     position: relative;
     overflow-x: hidden;
   }
@@ -106,7 +105,7 @@ const STYLES = `
     pointer-events: none;
   }
   .ep-header-text h1 {
-    font-family: 'Playfair Display', serif;
+    font-family: 'Cabinet Grotesk', sans-serif;
     color: #fff;
     font-size: 1.75rem;
     font-weight: 700;
@@ -162,7 +161,7 @@ const STYLES = `
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'Playfair Display', serif;
+    font-family: 'Cabinet Grotesk', sans-serif;
     font-size: 2.4rem;
     color: var(--maroon);
     font-weight: 700;
@@ -227,7 +226,7 @@ const STYLES = `
     display: flex;
     align-items: center;
     gap: 12px;
-    font-family: 'Playfair Display', serif;
+    font-family: 'Cabinet Grotesk', sans-serif;
     font-size: 1.15rem;
     font-weight: 700;
     color: var(--maroon-dark);
@@ -321,7 +320,7 @@ const STYLES = `
     outline: none;
     background: transparent;
     padding: 12px 14px;
-    font-family: 'Nunito', sans-serif;
+    font-family: 'Cabinet Grotesk', sans-serif;
     font-size: 0.9rem;
     color: var(--text-dark);
     font-weight: 500;
@@ -456,7 +455,7 @@ const STYLES = `
     gap: 8px;
     padding: 12px 28px;
     border-radius: 12px;
-    font-family: 'Nunito', sans-serif;
+    font-family: 'Cabinet Grotesk', sans-serif;
     font-size: 0.85rem;
     font-weight: 700;
     cursor: pointer;
@@ -850,7 +849,29 @@ export default function EditProfile() {
       if (image) fd.append("profile_pic", image);
       if (passwords.password) fd.append("password", passwords.password);
       await updateProfile(fd);
-      showToast("success", "Profile updated successfully!");
+      //  update navbar cache instantly
+const cached = sessionStorage.getItem("ul__user_cache");
+
+if (cached) {
+  const parsed = JSON.parse(cached);
+
+  // 🔥 DO NOT store blob in cache
+  // just force refresh instead
+
+  parsed.data.profile_pic = parsed.data.profile_pic 
+    ? parsed.data.profile_pic + "?t=" + Date.now()
+    : null;
+
+  parsed.data.first_name = form.first_name;
+  parsed.data.last_name = form.last_name;
+
+  sessionStorage.setItem("ul__user_cache", JSON.stringify(parsed));
+}
+
+// 🔥 notify navbar
+window.dispatchEvent(new Event("user-updated"));
+
+showToast("success", "Profile updated successfully!");
       setPasswords({ password: "", confirm: "" });
       setImage(null);
     } catch (err) {
@@ -906,7 +927,7 @@ export default function EditProfile() {
               >
                 {preview && !imgError ? (
                   <img
-                    src={getImageUrl(preview)}
+                    src={preview.startsWith("blob:") ? preview : getImageUrl(preview)} 
                     alt={`${form.first_name} ${form.last_name}`}
                     onError={() => setImgError(true)}
                   />

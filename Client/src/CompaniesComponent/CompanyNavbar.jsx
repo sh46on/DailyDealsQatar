@@ -330,7 +330,7 @@ export default function CompanyNavbar({ user }) {
 
           <MobileSection label="Flyers" icon={flyerIcon} onLinkClick={() => setMobileOpen(false)}>
             <Link to="/company/flyers" className="mob-sub-link">Manage Flyers</Link>
-            <Link to="/company/flyers/upload" className="mob-sub-link">Upload Flyer</Link>
+            <Link to="/company/flyers/create" className="mob-sub-link">Upload Flyer</Link>
           </MobileSection>
 
           <MobileSection label="Products" icon={productIcon} onLinkClick={() => setMobileOpen(false)}>

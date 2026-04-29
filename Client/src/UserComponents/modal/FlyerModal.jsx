@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { X, ArrowLeft, ArrowRight, FileText, Minus, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
-import { BASE_URL } from "../api/userApi";
+import  {BASE_URL}  from "../../api/api";
 
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";

@@ -492,7 +492,7 @@ class HomeAppSettingsSerializer(AppSettingsSerializer):
 
 
 class AdminProfileSerializer(serializers.ModelSerializer):
-    profile_pic = serializers.SerializerMethodField()
+    profile_pic = serializers.ImageField(required=False)  # for upload
     password = serializers.CharField(write_only=True, required=False)
 
     class Meta:
@@ -729,6 +729,7 @@ class CompanyDealFlyerSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "pdf",
+            "category_type",
             "is_active",
             "start_date",
             "end_date",
@@ -737,9 +738,17 @@ class CompanyDealFlyerSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at"]
 
     def validate(self, data):
-        if data["start_date"] > data["end_date"]:
+        start = data.get("start_date")
+        end = data.get("end_date")
+
+        if start and end and start > end:
             raise serializers.ValidationError("End date must be after start date")
+
         return data
+    def validate_category_type(self, value):
+        if not value:
+            raise serializers.ValidationError("Category is required")
+        return value 
 
 
 class ProductReviewSerializer(serializers.ModelSerializer):
@@ -825,6 +834,14 @@ class UserNavbarSerializer(serializers.ModelSerializer):
             request = self.context.get("request")
             return request.build_absolute_uri(settings.logo.url)
         return None
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+
+        if instance.profile_pic and request:
+            data["profile_pic"] = request.build_absolute_uri(instance.profile_pic.url)
+
+        return data
 
 
 # ---------- COMPANY ----------
@@ -874,6 +891,9 @@ class UserFlyerSerializer(serializers.ModelSerializer):
     company_name = serializers.CharField(source="company.name")
     company_logo = serializers.ImageField(source="company.logo")
 
+    avg_rating = serializers.FloatField(read_only=True)
+    review_count = serializers.IntegerField(read_only=True)
+
     class Meta:
         model = DealFlyer
         fields = [
@@ -885,6 +905,8 @@ class UserFlyerSerializer(serializers.ModelSerializer):
             "end_date",
             "company_name",
             "company_logo",
+            "avg_rating",
+            "review_count",
         ]
 
 
@@ -894,7 +916,6 @@ class UserDashboardSerializer(serializers.Serializer):
     total_products = serializers.IntegerField()
     total_categories = serializers.IntegerField()
     reviews = serializers.IntegerField()
-
     companies = UserCompanySerializer(many=True)
     products = UserProductSerializer(many=True)
     flyers = UserFlyerSerializer(many=True)
@@ -902,6 +923,7 @@ class UserDashboardSerializer(serializers.Serializer):
 
     saved_product_ids = serializers.ListField()
     saved_flyer_ids = serializers.ListField()
+
 
 
 class SavedItemSerializer(serializers.ModelSerializer):
@@ -1001,3 +1023,25 @@ class CompanyRequestSerializer(serializers.ModelSerializer):
         model = CompanyRequest
         fields = "__all__"
         read_only_fields = ["is_approved", "is_rejected"]
+
+
+
+
+
+class FlyerReviewSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source="user.get_full_name", read_only=True)
+    user_avatar = serializers.CharField(source="user.profile_pic", read_only=True)
+
+    class Meta:
+        model = ProductReview
+        fields = [
+            "id",
+            "user",
+            "user_name",
+            "user_avatar",
+            "flyer",
+            "rating",
+            "comment",
+            "created_at",
+        ]
+        read_only_fields = ["user", "created_at"]

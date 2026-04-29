@@ -449,7 +449,9 @@ export default function AuthRegister() {
       localStorage.setItem("role",    res.role);
 
       add("Account created successfully! Redirecting…", "success", 2500);
-      setTimeout(() => {navigate("/user/home");}, 1800);
+      // setTimeout(() => {navigate("/user/home");}, 1800);
+      setTimeout(() => {navigate("/login");}, 1800);
+      
 
     } catch (err) {
       setProgress(0);

@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import { getFlyerReviews } from "./api/companyApi";
 import CompanyLayout from "../CompaniesComponent/CompanyLayout";
+import { getImageUrl } from "../api/media";
 
-/* ─────────────────────────────────────────────────────────────────
-   Global styles — same palette as CompanyDashboard & AddFlyer
-───────────────────────────────────────────────────────────────── */
 const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Bricolage+Grotesque:wght@600;700;800&display=swap');
 
@@ -19,7 +17,6 @@ const STYLES = `
     overflow-x: hidden;
   }
 
-  /* ── Gradient hero ── */
   .fr-hero {
     position: fixed;
     top: 0; left: 0; right: 0;
@@ -40,7 +37,6 @@ const STYLES = `
     max-width: 860px; margin: 0 auto;
   }
 
-  /* ── Top bar ── */
   .fr-topbar {
     display: flex; align-items: center; justify-content: space-between;
     flex-wrap: wrap; gap: 12px;
@@ -59,7 +55,6 @@ const STYLES = `
     white-space: nowrap;
   }
 
-  /* ── Summary metric strip ── */
   .fr-metrics {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -98,7 +93,6 @@ const STYLES = `
   }
   .fr-metric-hint { font-size: 11px; color: #94a3b8; margin-top: 4px; }
 
-  /* ── Flyer block ── */
   .fr-flyer {
     background: #fff; border-radius: 20px;
     border: 1.5px solid rgba(99,102,241,0.09);
@@ -109,7 +103,6 @@ const STYLES = `
   }
   .fr-flyer:hover { box-shadow: 0 8px 30px rgba(79,70,229,0.12); }
 
-  /* Flyer header */
   .fr-flyer-hd {
     padding: 1.3rem 1.5rem 1.1rem;
     display: flex; align-items: flex-start;
@@ -132,7 +125,6 @@ const STYLES = `
   }
   .fr-flyer-meta { font-size: 12px; color: #94a3b8; margin-top: 3px; font-weight: 500; }
 
-  /* Rating badge */
   .fr-rating-badge {
     display: flex; align-items: center; gap: 8px;
     background: #faf5ff; border: 1.5px solid #e9d5ff;
@@ -148,7 +140,6 @@ const STYLES = `
   .fr-star-empty  { color: #e2e8f0; font-size: 13px; line-height: 1; }
   .fr-rating-count { font-size: 10.5px; color: #94a3b8; font-weight: 600; letter-spacing: .04em; }
 
-  /* Rating bar chart */
   .fr-rating-bars {
     padding: 1rem 1.5rem;
     border-bottom: 1.5px solid #f1f5f9;
@@ -164,7 +155,6 @@ const STYLES = `
   }
   .fr-bar-count { font-size: 11px; font-weight: 600; color: #94a3b8; width: 22px; flex-shrink: 0; }
 
-  /* Toggle reviews */
   .fr-toggle-btn {
     width: 100%; background: none; border: none; cursor: pointer;
     padding: 12px 1.5rem;
@@ -181,13 +171,11 @@ const STYLES = `
   }
   .fr-chevron.open { transform: rotate(180deg); }
 
-  /* Reviews list */
   .fr-reviews-wrap {
     overflow: hidden;
     transition: max-height .5s cubic-bezier(.22,1,.36,1);
   }
 
-  /* Individual review */
   .fr-review {
     padding: 1.1rem 1.5rem;
     border-bottom: 1px solid #f8faff;
@@ -197,13 +185,21 @@ const STYLES = `
   .fr-review:last-child { border-bottom: none; }
   .fr-review:hover { background: #fdfcff; }
 
-  /* Avatar */
+  /* ── Avatar: shared base for both image and initials ── */
   .fr-avatar {
     width: 38px; height: 38px; border-radius: 12px; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
     font-family: 'Bricolage Grotesque', sans-serif;
     font-size: 13px; font-weight: 800; color: #fff;
+    overflow: hidden;
   }
+  .fr-avatar img {
+    width: 100%; height: 100%;
+    object-fit: cover; object-position: center;
+    border-radius: 12px;
+    display: block;
+  }
+
   .fr-review-body { flex: 1; min-width: 0; }
   .fr-review-top {
     display: flex; align-items: center; justify-content: space-between;
@@ -214,7 +210,6 @@ const STYLES = `
   .fr-review-comment { font-size: 13px; color: #64748b; line-height: 1.65; }
   .fr-review-date { font-size: 11px; color: #c4cada; margin-top: 5px; font-weight: 500; }
 
-  /* No reviews */
   .fr-no-reviews {
     padding: 2rem 1.5rem; text-align: center;
     color: #c4cada; font-size: 13px; font-weight: 500;
@@ -225,7 +220,6 @@ const STYLES = `
     background: #f8faff; display: flex; align-items: center; justify-content: center;
   }
 
-  /* Empty page state */
   .fr-empty {
     text-align: center; padding: 4rem 1rem;
     color: #94a3b8; font-size: 14px;
@@ -238,7 +232,6 @@ const STYLES = `
     box-shadow: 0 2px 14px rgba(79,70,229,0.07);
   }
 
-  /* Loading */
   .fr-loading {
     display: flex; flex-direction: column; align-items: center;
     justify-content: center; min-height: 340px; gap: 14px; color: #94a3b8;
@@ -249,7 +242,6 @@ const STYLES = `
     border-radius: 50%; animation: fr-spin .7s linear infinite;
   }
 
-  /* Section heading */
   .fr-sec-hd { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
   .fr-sec-title {
     font-family: 'Bricolage Grotesque', sans-serif;
@@ -261,7 +253,6 @@ const STYLES = `
     padding: 3px 11px; border-radius: 20px;
   }
 
-  /* Animations */
   @keyframes fr-spin { to { transform: rotate(360deg); } }
   @keyframes fr-up {
     from { opacity: 0; transform: translateY(20px); }
@@ -272,7 +263,6 @@ const STYLES = `
   .fr-d2 { animation-delay: .12s; }
   .fr-d3 { animation-delay: .19s; }
 
-  /* Responsive */
   @media (max-width: 480px) {
     .fr { padding: 1.2rem 1rem 2.5rem; }
     .fr-page-title { font-size: 18px; }
@@ -316,6 +306,33 @@ function Stars({ value, size = 13 }) {
           <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
         </svg>
       ))}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Avatar — profile image with initials fallback
+───────────────────────────────────────────────────────────────── */
+function ReviewAvatar({ name, profileUrl }) {
+  const [imgError, setImgError] = useState(false);
+  const [bg] = avatarColor(name);
+  const showImage = profileUrl && !imgError;
+
+  return (
+    <div
+      className="fr-avatar"
+      style={{ background: showImage ? "transparent" : bg }}
+      aria-hidden="true"
+    >
+      {showImage ? (
+        <img
+          src={profileUrl}
+          alt={name}
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        initials(name)
+      )}
     </div>
   );
 }
@@ -399,7 +416,6 @@ function FlyerBlock({ flyer, index }) {
           </div>
         </div>
 
-        {/* Decorative wave strip inside header */}
         <img
           src={waveSrc} alt="" aria-hidden="true"
           style={{
@@ -448,36 +464,27 @@ function FlyerBlock({ flyer, index }) {
             No reviews yet for this flyer
           </div>
         ) : (
-          reviews.map(r => {
-            const [bg] = avatarColor(r.user_name);
-            return (
-              <div className="fr-review" key={r.id}>
-                <div
-                  className="fr-avatar"
-                  style={{ background: bg }}
-                  aria-hidden="true"
-                >
-                  {initials(r.user_name)}
+          reviews.map(r => (
+            <div className="fr-review" key={r.id}>
+              <ReviewAvatar name={r.user_name} profileUrl={getImageUrl(r.user_profile)} />
+              <div className="fr-review-body">
+                <div className="fr-review-top">
+                  <span className="fr-reviewer-name">{r.user_name}</span>
+                  <Stars value={r.rating} size={12} />
                 </div>
-                <div className="fr-review-body">
-                  <div className="fr-review-top">
-                    <span className="fr-reviewer-name">{r.user_name}</span>
-                    <Stars value={r.rating} size={12} />
+                {r.comment && (
+                  <p className="fr-review-comment">{r.comment}</p>
+                )}
+                {r.created_at && (
+                  <div className="fr-review-date">
+                    {new Date(r.created_at).toLocaleDateString("en-US", {
+                      month: "short", day: "numeric", year: "numeric",
+                    })}
                   </div>
-                  {r.comment && (
-                    <p className="fr-review-comment">{r.comment}</p>
-                  )}
-                  {r.created_at && (
-                    <div className="fr-review-date">
-                      {new Date(r.created_at).toLocaleDateString("en-US", {
-                        month: "short", day: "numeric", year: "numeric",
-                      })}
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
-            );
-          })
+            </div>
+          ))
         )}
       </div>
     </div>

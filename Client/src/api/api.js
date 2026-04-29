@@ -2,7 +2,7 @@ import axios from "axios";
 
 
 
-const BASE_URL = "http://127.0.0.1:8000";
+export const BASE_URL = "http://127.0.0.1:8000";
 
 // AUTH API
 export const API_URL = axios.create({
@@ -39,4 +39,3 @@ attachToken(API_URL);
 attachToken(AUTH_API);
 attachToken(MARKET_API);
 
-export default BASE_URL;

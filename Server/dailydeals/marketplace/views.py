@@ -12,7 +12,7 @@ from rest_framework.pagination import PageNumberPagination
 from deals_app.models import User
 
 
-class ProductListAPIView(APIView):
+class ProductListAPIView(APIView): 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):

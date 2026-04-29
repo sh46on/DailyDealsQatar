@@ -11,12 +11,11 @@ import {
 import { useNavigate } from "react-router-dom";
 import { Document, Page, pdfjs } from "react-pdf";
 import FlyerModal from "./modal/FlyerModal";
-import {API_URL} from "../api/api"
+import {BASE_URL} from "./api/userApi"
 
 // PDF.js worker setup
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-const BASE_URL = API_URL; // Update with your backend URL
 
 export default function SavedItems() {
   const navigate = useNavigate();
@@ -336,12 +335,11 @@ export default function SavedItems() {
 function Styles() {
   return (
     <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
 
       .si-wrap {
         min-height: 100vh;
         background: linear-gradient(135deg, #faf8f8 0%, #f5f3f0 100%);
-        font-family: 'DM Sans', sans-serif;
+        font-family: 'Cabinet Grotesk', sans-serif;
         color: #1a0a0a;
       }
 
@@ -395,7 +393,7 @@ function Styles() {
         50% { transform: translateY(-10px); }
       }
       .si-hero-title {
-        font-family: 'Playfair Display', Georgia, serif;
+        font-family: 'Cabinet Grotesk', sans-serif;
         font-size: clamp(32px, 6vw, 52px);
         font-weight: 800;
         color: #fff;
@@ -426,7 +424,7 @@ function Styles() {
         font-size: 24px;
         font-weight: 800;
         color: #fff;
-        font-family: 'Playfair Display', serif;
+        font-family: 'Cabinet Grotesk', sans-serif;
         line-height: 1;
       }
       .si-stat-label {
@@ -705,7 +703,7 @@ function Styles() {
         font-weight: 800;
         color: #7f1d1d;
         margin: 0;
-        font-family: 'Playfair Display', serif;
+        font-family: 'Cabinet Grotesk', sans-serif;
       }
       .si-old-price {
         font-size: 13px;
@@ -768,7 +766,7 @@ function Styles() {
         box-shadow: 0 8px 24px rgba(0,0,0,0.08);
       }
       .si-empty h3 {
-        font-family: 'Playfair Display', serif;
+        font-family: 'Cabinet Grotesk', sans-serif;
         font-size: 24px;
         color: #1a0a0a;
         margin: 0 0 12px;

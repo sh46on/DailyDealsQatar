@@ -20,11 +20,13 @@ class ProductImageSerializer(serializers.ModelSerializer):
 # ================= PRODUCT LIST =================
 class ProductListSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
-
+    seller_profile_image = serializers.SerializerMethodField()
     seller_name = serializers.CharField(source="seller.phone", read_only=True)
     category_name = serializers.SerializerMethodField()
     seller_id = serializers.IntegerField(source="seller.id", read_only=True)
     primary_image = serializers.SerializerMethodField()
+    seller_first_name = serializers.CharField(source="seller.first_name", read_only=True)
+    seller_last_name = serializers.CharField(source="seller.last_name", read_only=True)
 
     class Meta:
         model = Product
@@ -39,6 +41,9 @@ class ProductListSerializer(serializers.ModelSerializer):
             "view_count",
             "created_at",
             "primary_image",  # optimized
+            "seller_profile_image",
+            "seller_first_name",
+            "seller_last_name",
             "images",
             "seller_name",
             "category_name",
@@ -56,6 +61,15 @@ class ProductListSerializer(serializers.ModelSerializer):
         image = obj.images.first()
         if image and image.image and request:
             return request.build_absolute_uri(image.image.url)
+
+        return None
+    def get_seller_profile_image(self, obj):
+        request = self.context.get("request")
+        profile = getattr(obj.seller, "marketplace_profile", None)
+
+        if profile and profile.profile_image:
+            url = profile.profile_image.url
+            return request.build_absolute_uri(url) if request else url
 
         return None
 
@@ -467,3 +481,5 @@ class AdminUserProfileSerializer(serializers.ModelSerializer):
         first = obj.user.first_name or ""
         last = obj.user.last_name or ""
         return f"{first} {last}".strip() or "User"
+
+

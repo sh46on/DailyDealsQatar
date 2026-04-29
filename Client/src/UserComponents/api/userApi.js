@@ -1,6 +1,6 @@
-import {AUTH_API, API_URL} from "../../api/api";
+import {AUTH_API, BASE_URL} from "../../api/api";
 
-export const BASE_URL = API_URL;
+
 
 // API calls
 export const getUserNavbar = () =>
@@ -29,3 +29,6 @@ export const updateProfile = (formData) =>
       "Content-Type": "multipart/form-data",
     },
   });
+
+
+export { BASE_URL };

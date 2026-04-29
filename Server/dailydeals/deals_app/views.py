@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.db import DatabaseError, transaction
 from deals_app.serializers import *
-from deals_app.services import get_homepage_data
+from deals_app.service import get_homepage_data
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from django.utils.timezone import now
 from deals_app.models import *
@@ -17,20 +17,106 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from rest_framework.pagination import PageNumberPagination
 import logging
-import random
+import random       
 import string
 import time
 import re
+from rest_framework.exceptions import NotFound
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
 
 
 class StandardPagination(PageNumberPagination):
-    page_size = 10
+    page_size = 12
     page_size_query_param = "page_size"
     max_page_size = 50
 
+
+#-------------------------------
+# class HomePageAPIView(APIView):
+#     permission_classes = []
+
+#     def get(self, request):
+#         category_id = request.GET.get("category")
+#         sub_id = request.GET.get("sub")
+
+#         # ---------- CACHE + FALLBACK ----------
+#         try:
+#             companies = cache.get("homepage_companies")
+#             categories = cache.get("homepage_categories")
+
+#             if companies is None or categories is None:
+#                 try:
+#                     refresh_homepage_cache()
+#                 except Exception:
+#                     pass  # celery may be down
+
+#                 from deals_app.service import get_homepage_data
+#                 companies_qs, categories_qs = get_homepage_data()
+
+#                 companies = CompanySerializer(companies_qs, many=True).data
+#                 categories = CategorySerializer(categories_qs, many=True).data
+
+#         except Exception as e:
+#             logger.error(f"Cache error: {str(e)}")
+
+#             from deals_app.service import get_homepage_data
+#             companies_qs, categories_qs = get_homepage_data()
+
+#             companies = CompanySerializer(companies_qs, many=True).data
+#             categories = CategorySerializer(categories_qs, many=True).data
+
+#         # ---------- PRODUCTS ----------
+#         products = Product.objects.filter(is_active=True)
+
+#         if category_id:
+#             products = products.filter(category_id=category_id)
+
+#         if sub_id:
+#             products = products.filter(subcategory_id=sub_id)
+
+#         products = products.select_related(
+#             "category", "subcategory", "company"
+#         ).order_by("-created_at")
+
+#         # ---------- PAGINATION ----------
+#         paginator = StandardPagination()
+#         paginated_products = paginator.paginate_queryset(products, request)
+
+#         products_data = ProductSerializer(paginated_products, many=True).data
+
+#         # ---------- FLYERS (OPTIONAL PAGINATION) ----------
+#         flyers = DealFlyer.objects.filter(is_active=True)\
+#             .select_related("company")\
+#             .order_by("-created_at")
+
+#         paginated_flyers = paginator.paginate_queryset(flyers, request)
+#         flyers_data = DealFlyerSerializer(paginated_flyers, many=True).data
+
+#         # ---------- RESPONSE ----------
+#         response = paginator.get_paginated_response(products_data)
+#         response.data.update({
+#             "success": True,
+#             "companies": companies if companies else [],
+#             "categories": categories if categories else [],
+            
+#             "pdfs": flyers_data,
+#         })
+#         return response
+
+#-------------------------------
+
+from rest_framework.exceptions import NotFound
+
+
+class SeparateParamPagination(StandardPagination):
+    """Subclass that reads a custom page-query param so products and flyers
+    never share the same ?page= key."""
+
+    def __init__(self, page_query_param="page"):
+        super().__init__()
+        self.page_query_param = page_query_param
 
 
 class HomePageAPIView(APIView):
@@ -38,72 +124,95 @@ class HomePageAPIView(APIView):
 
     def get(self, request):
         category_id = request.GET.get("category")
-        sub_id = request.GET.get("sub")
+        sub_id      = request.GET.get("sub")
 
-        # ---------- CACHE + FALLBACK ----------
+        # ---------- CACHE ----------
         try:
-            companies = cache.get("homepage_companies")
+            companies  = cache.get("homepage_companies")
             categories = cache.get("homepage_categories")
 
             if companies is None or categories is None:
                 try:
-                    refresh_homepage_cache.delay()
+                    refresh_homepage_cache()
                 except Exception:
-                    pass  # celery may be down
+                    pass
 
-                from deals_app.services import get_homepage_data
+                from deals_app.service import get_homepage_data
                 companies_qs, categories_qs = get_homepage_data()
-
-                companies = CompanySerializer(companies_qs, many=True).data
+                companies  = CompanySerializer(companies_qs,  many=True).data
                 categories = CategorySerializer(categories_qs, many=True).data
 
-        except Exception as e:
-            logger.error(f"Cache error: {str(e)}")
-
-            from deals_app.services import get_homepage_data
+        except Exception:
+            from deals_app.service import get_homepage_data
             companies_qs, categories_qs = get_homepage_data()
-
-            companies = CompanySerializer(companies_qs, many=True).data
+            companies  = CompanySerializer(companies_qs,  many=True).data
             categories = CategorySerializer(categories_qs, many=True).data
 
-        # ---------- PRODUCTS ----------
-        products = Product.objects.filter(is_active=True)
-
+        # ---------- PRODUCTS  (param: ?page=N) ----------
+        products = (
+            Product.objects
+            .filter(is_active=True)
+            .select_related("category", "subcategory", "company")
+        )
         if category_id:
             products = products.filter(category_id=category_id)
-
         if sub_id:
             products = products.filter(subcategory_id=sub_id)
+        products = products.order_by("-created_at")
 
-        products = products.select_related(
-            "category", "subcategory", "company"
-        ).order_by("-created_at")
+        product_paginator = SeparateParamPagination(page_query_param="page")
 
-        # ---------- PAGINATION ----------
-        paginator = StandardPagination()
-        paginated_products = paginator.paginate_queryset(products, request)
+        try:
+            paginated_products = product_paginator.paginate_queryset(products, request)
+        except NotFound:
+            return Response({
+                "count":    0,
+                "next":     None,
+                "previous": None,
+                "results":  [],
+                "success":  True,
+                "companies":  companies  or [],
+                "categories": categories or [],
+                "pdfs": {"count": 0, "next": None, "previous": None, "results": []},
+            })
 
         products_data = ProductSerializer(paginated_products, many=True).data
 
-        # ---------- FLYERS (OPTIONAL PAGINATION) ----------
-        flyers = DealFlyer.objects.filter(is_active=True)\
-            .select_related("company")\
+        # ---------- FLYERS  (param: ?flyer_page=N) ----------
+        flyers = (
+            DealFlyer.objects
+            .filter(is_active=True)
+            .select_related("company")
             .order_by("-created_at")
+        )
 
-        paginated_flyers = paginator.paginate_queryset(flyers, request)
-        flyers_data = DealFlyerSerializer(paginated_flyers, many=True).data
+        flyer_paginator = SeparateParamPagination(page_query_param="flyer_page")
+
+        try:
+            flyers_page = flyer_paginator.paginate_queryset(flyers, request)
+        except NotFound:
+            flyers_page = []
+
+        flyers_data  = DealFlyerSerializer(flyers_page, many=True).data
+        flyers_count = flyers.count()
 
         # ---------- RESPONSE ----------
-        response = paginator.get_paginated_response(products_data)
-        response.data.update({
-            "success": True,
-            "companies": companies if companies else [],
-            "categories": categories if categories else [],
-            
-            "pdfs": flyers_data,
-        })
-        return response
+        response = product_paginator.get_paginated_response(products_data)
 
+        response.data.update({
+            "success":    True,
+            "companies":  companies  or [],
+            "categories": categories or [],
+            "products":   response.data.get("results"),
+            "pdfs": {
+                "count":    flyers_count,
+                "next":     flyer_paginator.get_next_link() if flyers_page else None,
+                "previous": flyer_paginator.get_previous_link() if flyers_page else None,
+                "results":  flyers_data,
+            },
+        })
+
+        return response
 
 # Admin
 
@@ -341,6 +450,7 @@ class AppSettingsAPIView(APIView):
 
 class AdminProfileAPIView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser] 
 
     def get(self, request):
         serializer = AdminProfileSerializer(request.user, context={"request": request})
@@ -610,7 +720,6 @@ class CompanyProductListAPIView(APIView):
 
         return Response(CompanyProductSerializer(products, many=True).data)
 
-from deals_app.services.flyer_ai import process_flyer
 
 # class CompanyFlyerCreateAPIView(APIView):
 #     permission_classes = [IsAuthenticated]
@@ -633,6 +742,13 @@ from deals_app.services.flyer_ai import process_flyer
 
 #------------------------------
 
+from deals_app.ocr_utils import process_flyer, get_or_create_category
+from decimal import Decimal, ROUND_HALF_UP
+from django.core.files.base import ContentFile
+import uuid
+import cv2
+import numpy as np
+
 
 class CompanyFlyerCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -649,15 +765,96 @@ class CompanyFlyerCreateAPIView(APIView):
         if serializer.is_valid():
             flyer = serializer.save(company=user.company)
 
-            # background AI processing
-            from deals_app.tasks import process_flyer_task
-            process_flyer_task.delay(flyer.id)
+            try:
+                pdf_path = flyer.pdf.path
 
-            return Response({"success": True, "data": serializer.data})
+                # ✅ FIX: unpack result
+                result = process_flyer(pdf_path)
+                products_data = result.get("products", [])
+                images = result.get("images", [])
+
+                for index, item in enumerate(products_data):
+                    try:
+                        name = item.get("name")
+                        raw_price = item.get("price", 0)
+
+                        if not name:
+                            continue
+
+                        try:
+                            price = Decimal(str(raw_price)).quantize(
+                                Decimal("0.01"),
+                                rounding=ROUND_HALF_UP
+                            )
+                        except:
+                            continue
+
+                        if price <= 0:
+                            continue
+
+                        # 🔥 OLD PRICE
+                        old_price = item.get("old_price")
+                        if old_price:
+                            try:
+                                old_price = Decimal(str(old_price)).quantize(
+                                    Decimal("0.01"),
+                                    rounding=ROUND_HALF_UP
+                                )
+                            except:
+                                old_price = None
+
+                        # 🔥 CATEGORY
+                        category, subcategory = get_or_create_category(
+                            item.get("category"),
+                            item.get("subcategory")
+                        )
+
+                        # 🔥 IMAGE (basic mapping)
+                        image_file = None
+                        if index < len(images):
+                            try:
+                                img = images[index]
+                                _, buffer = cv2.imencode(".jpg", np.array(img))
+                                image_file = ContentFile(
+                                    buffer.tobytes(),
+                                    name=f"{uuid.uuid4()}.jpg"
+                                )
+                            except:
+                                pass
+
+                        product, created = Product.objects.get_or_create(
+                            company=user.company,
+                            name=name.strip(),
+                            defaults={
+                                "price": price,
+                                "old_price": old_price,
+                                "description": item.get("description", ""),
+                                "quantity": item.get("quantity", ""),
+                                "category": category,
+                                "subcategory": subcategory,
+                                "image": image_file
+                            }
+                        )
+
+                        FlyerProduct.objects.get_or_create(
+                            flyer=flyer,
+                            product=product,
+                            defaults={"page_number": 1}
+                        )
+
+                    except Exception as e:
+                        print("⚠️ Product skipped:", e)
+                        continue
+
+            except Exception as e:
+                print("❌ OCR Error:", str(e))
+
+            return Response({
+                "success": True,
+                "data": serializer.data
+            })
 
         return Response(serializer.errors, status=400)
-
-
 
 
 #------------------------------
@@ -743,7 +940,10 @@ class CompanyFlyerReviewsAPIView(APIView):
 
         company = user.company
 
-        flyers = DealFlyer.objects.filter(company=company)
+        flyers = DealFlyer.objects.filter(company=company).annotate(
+            avg_rating=Avg("reviews__rating"),
+            total_reviews=Count("reviews")
+        ).prefetch_related("reviews")
 
         data = []
 
@@ -848,17 +1048,27 @@ class UserNavbarAPIView(APIView):
     def get(self, request):
         cache_key = f"{CACHE_KEY}_{request.user.id}"
 
-        data = cache.get(cache_key)
+        try:
+            data = cache.get(cache_key)
+        except Exception:
+            data = None  # fallback if Redis fails
+
 
         if not data:
             serializer = UserNavbarSerializer(
                 request.user, context={"request": request}
             )
             data = serializer.data
-            cache.set(cache_key, data, 300)
+            try:
+                cache.set(cache_key, data, 300)
+            except Exception:
+                pass  # ignore cache failure
 
         return Response({"success": True, "data": data})
 
+
+from django.db.models import Avg, Count, Value, FloatField
+from django.db.models.functions import Coalesce
 
 class UserDashboardAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -867,7 +1077,12 @@ class UserDashboardAPIView(APIView):
         user = request.user
 
         products = Product.objects.filter(is_active=True).select_related("company")
-        flyers = DealFlyer.objects.filter(is_active=True).select_related("company")
+
+        flyers = DealFlyer.objects.filter(is_active=True).select_related("company").annotate(
+            avg_rating=Coalesce(Avg("reviews__rating"), Value(0.0), output_field=FloatField()),
+            review_count=Count("reviews", distinct=True)
+        )
+
         companies = Company.objects.all()
         categories = Category.objects.prefetch_related("subcategories")
 
@@ -879,15 +1094,17 @@ class UserDashboardAPIView(APIView):
             "total_products": products.count(),
             "total_categories": categories.count(),
             "reviews": ProductReview.objects.filter(user=user).count(),
+
             "companies": companies,
-            "products": products[:20],  # limit
-            "flyers": flyers[:20],
+            "products": products,
+            "flyers": flyers,
             "categories": categories,
-            "saved_product_ids": [s.product_id for s in saved_products],
-            "saved_flyer_ids": [s.flyer_id for s in saved_flyers],
+
+            "saved_product_ids": list(saved_products.values_list("product_id", flat=True)),
+            "saved_flyer_ids": list(saved_flyers.values_list("flyer_id", flat=True)),
         }
 
-        serializer = UserDashboardSerializer(data)
+        serializer = UserDashboardSerializer(instance=data)
         return Response({"success": True, "data": serializer.data})
 
 
@@ -973,6 +1190,7 @@ class UserProfileAPIView(APIView):
 
         if serializer.is_valid():
             serializer.save()
+            cache.delete(f"user_navbar_{request.user.id}")
             return Response({"success": True, "data": serializer.data})
 
         return Response(serializer.errors, status=400)
@@ -1109,7 +1327,7 @@ class ApproveCompanyAPIView(APIView):
 
         if email:
             try:
-                send_company_email_task.delay(email, final_password, obj.company_name)
+                send_company_email_task(email, final_password, obj.company_name)
                 email_status = "queued"
             except Exception as e:
                 email_status = f"error ({str(e)})"
@@ -1136,3 +1354,40 @@ class RejectCompanyAPIView(APIView):
         CompanyRequest.objects.filter(id=pk).update(is_rejected=True)
 
         return Response({"success": True})
+
+
+
+
+from rest_framework import status
+from django.shortcuts import get_object_or_404
+
+# GET reviews for a flyer
+class FlyerReviewListAPIView(APIView):
+    def get(self, request, flyer_id):
+        reviews = ProductReview.objects.filter(flyer_id=flyer_id).select_related("user")
+        serializer = FlyerReviewSerializer(reviews, many=True)
+        return Response({"success": True, "data": serializer.data})
+
+
+# POST / UPDATE review
+class FlyerReviewCreateUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, flyer_id):
+        flyer = get_object_or_404(DealFlyer, id=flyer_id)
+
+        review, created = ProductReview.objects.update_or_create(
+            user=request.user,
+            flyer=flyer,
+            defaults={
+                "rating": request.data.get("rating"),
+                "comment": request.data.get("comment"),
+            },
+        )
+
+        serializer = FlyerReviewSerializer(review)
+        return Response({
+            "success": True,
+            "message": "Review created" if created else "Review updated",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)

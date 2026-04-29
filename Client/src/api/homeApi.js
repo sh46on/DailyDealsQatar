@@ -13,7 +13,6 @@ export const fetchHomeData = async ({
   let response;
 
   if (url) {
-    // NEXT / PREVIOUS pagination
     response = await axios.get(url, { signal });
   } else {
     response = await API.get("/home/", {
@@ -53,11 +52,16 @@ export const fetchHomeData = async ({
       image: getImageUrl(p.image),
     })),
 
-    // PDFS (NOT PAGINATED)
-    pdfs: (data.pdfs || []).map(pdf => ({
-      ...pdf,
-      pdf: getImageUrl(pdf.pdf),
-      company_logo: getImageUrl(pdf.company_logo),
-    })),
+    //  FIXED PDFS PAGINATION
+    pdfs: {
+      count: data.pdfs?.count || 0,
+      next: data.pdfs?.next || null,
+      previous: data.pdfs?.previous || null,
+      results: (data.pdfs?.results || []).map(pdf => ({
+        ...pdf,
+        pdf: getImageUrl(pdf.pdf),
+        company_logo: getImageUrl(pdf.company_logo),
+      })),
+    },
   };
 };

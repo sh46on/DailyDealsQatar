@@ -483,7 +483,7 @@ export default function AdminHome() {
           gridTemplateColumns:"repeat(auto-fit, minmax(172px,1fr))",
           gap:16, marginBottom:16,
         }}>
-          <KpiCard delay={0.05} label="Total Users"    value={data.total_users}      accent={C.rose}    icon={<Users     size={17} color={C.rose}    />} trend={12} />
+          <KpiCard delay={0.05} label="Total Accounts"    value={data.total_users}      accent={C.rose}    icon={<Users     size={17} color={C.rose}    />} trend={12} />
           <KpiCard delay={0.10} label="Companies"      value={data.total_companies}  accent={C.amber}   icon={<Building2 size={17} color={C.amber}   />} trend={0}  />
           <KpiCard delay={0.15} label="Products"       value={data.total_products}   accent={C.teal}    icon={<Package   size={17} color={C.teal}    />} trend={5}  />
           <KpiCard delay={0.20} label="Categories"     value={data.total_categories} accent={C.indigo}  icon={<Layers    size={17} color={C.indigo}  />} trend={-2} />
