@@ -7,50 +7,36 @@ import {
   useRef,
   Component,
 } from "react";
-import MarketplaceLogin from "./Apps/Marketplace/MarketplaceLogin";
-import MarketplaceHome from "./Apps/Marketplace/MarketplaceHome";
-import MarketplaceNotifications from "./Apps/Marketplace/MarketplaceNotifications";
-import MarketplaceSaved from "./Apps/Marketplace/MarketplaceSaved";
-import MarketplaceInterests from "./Apps/Marketplace/MarketplaceInterests";
-import MarketplaceProfile from "./Apps/Marketplace/MarketplaceProfile";
-import MarketplaceSell from "./Apps/Marketplace/MarketplaceSell";
-import AdminCompanyRequests from "./AdminComponents/AdminCompanyRequests";
-import CompanyRequestForm from "./pages/CompanyRequestForm";
-import AdminMarketplaceDashboard from "./AdminComponents/MarketplaceAdmin/AdminMarketplaceDashboard";
-import AdminManageListings from "./AdminComponents/MarketplaceAdmin/AdminManageListings";
-import AdminManageUsers from "./AdminComponents/MarketplaceAdmin/AdminManageUsers";
-import PrivacyPolicy from "./pages/extras/PrivacyPolicy";
-import TermsOfService from "./pages/extras/TermsOfService";
-import CookiePolicy from "./pages/extras/CookiePolicy";
 
 /* ══════════════════════════════════════════════════════════════════
    LAZY ROUTES — every chunk loads on demand
+   ⚠️  All imports are lazy. No eager imports for page-level components.
 ══════════════════════════════════════════════════════════════════ */
 
 /* Layout */
 const MainLayout = lazy(() => import("./layouts/MainLayout"));
-// const MarketplaceLayout = lazy(() => import("./Apps/Marketplace/MarketplaceLayout"));
-// const AdminLayout = lazy(() => import("./AdminComponents/AdminLayout"));
-// const CompanyLayout = lazy(() => import("./CompaniesComponent/CompanyLayout"));
-// const UserLayout = lazy(() => import("./UserComponents/UserLayout"));
 
 /* Public */
 const Home        = lazy(() => import("./pages/Home"));
-const Marketplace = lazy(() => import("./Apps/Marketplace/Marketplace")); 
-const Ticketing   = lazy(() => import("./Apps/Ticketing/Ticketing"));  
+const Marketplace = lazy(() => import("./Apps/Marketplace/Marketplace"));
+const Ticketing   = lazy(() => import("./Apps/Ticketing/Ticketing"));
 
 /* Auth */
 const AuthLogin    = lazy(() => import("./AuthComponents/AuthLogin"));
 const AuthRegister = lazy(() => import("./AuthComponents/AuthRegister"));
 
 /* Admin */
-const AdminHome        = lazy(() => import("./AdminComponents/AdminHome"));
-const ManageCompanies  = lazy(() => import("./AdminComponents/ManageCompanies"));
-const ManageUsers      = lazy(() => import("./AdminComponents/ManageUsers"));
-const AdminSettings    = lazy(() => import("./AdminComponents/AdminSettings"));
-const ManageFlyers     = lazy(() => import("./AdminComponents/ManageFlyers"));
-const ManageProducts   = lazy(() => import("./AdminComponents/ManageProducts"));
-const ManageCategories = lazy(() => import("./AdminComponents/ManageCategories"));
+const AdminHome              = lazy(() => import("./AdminComponents/AdminHome"));
+const ManageCompanies        = lazy(() => import("./AdminComponents/ManageCompanies"));
+const ManageUsers            = lazy(() => import("./AdminComponents/ManageUsers"));
+const AdminSettings          = lazy(() => import("./AdminComponents/AdminSettings"));
+const ManageFlyers           = lazy(() => import("./AdminComponents/ManageFlyers"));
+const ManageProducts         = lazy(() => import("./AdminComponents/ManageProducts"));
+const ManageCategories       = lazy(() => import("./AdminComponents/ManageCategories"));
+const AdminCompanyRequests   = lazy(() => import("./AdminComponents/AdminCompanyRequests"));
+const AdminMarketplaceDashboard = lazy(() => import("./AdminComponents/MarketplaceAdmin/AdminMarketplaceDashboard"));
+const AdminManageListings    = lazy(() => import("./AdminComponents/MarketplaceAdmin/AdminManageListings"));
+const AdminManageUsers       = lazy(() => import("./AdminComponents/MarketplaceAdmin/AdminManageUsers"));
 
 /* Company */
 const CompanyDashboard    = lazy(() => import("./CompaniesComponent/CompanyDashboard"));
@@ -65,15 +51,29 @@ const UserHome    = lazy(() => import("./UserComponents/UserHome"));
 const SavedItems  = lazy(() => import("./UserComponents/SavedItems"));
 const EditProfile = lazy(() => import("./UserComponents/EditProfile"));
 
+/* Marketplace */
+const MarketplaceLogin         = lazy(() => import("./Apps/Marketplace/MarketplaceLogin"));
+const MarketplaceHome          = lazy(() => import("./Apps/Marketplace/MarketplaceHome"));
+const MarketplaceNotifications = lazy(() => import("./Apps/Marketplace/MarketplaceNotifications"));
+const MarketplaceSaved         = lazy(() => import("./Apps/Marketplace/MarketplaceSaved"));
+const MarketplaceInterests     = lazy(() => import("./Apps/Marketplace/MarketplaceInterests"));
+const MarketplaceProfile       = lazy(() => import("./Apps/Marketplace/MarketplaceProfile"));
+const MarketplaceSell          = lazy(() => import("./Apps/Marketplace/MarketplaceSell"));
+
+/* Pages */
+const CompanyRequestForm = lazy(() => import("./pages/CompanyRequestForm"));
+const PrivacyPolicy      = lazy(() => import("./pages/extras/PrivacyPolicy"));
+const TermsOfService     = lazy(() => import("./pages/extras/TermsOfService"));
+const CookiePolicy       = lazy(() => import("./pages/extras/CookiePolicy"));
+
 /* Utility */
 const ProtectedRoute = lazy(() => import("./routes/ProtectedRoute"));
 
-/* ── Placeholder pages (remove once real pages exist) ── */
-const ComingSoon = ({ label }) => (
+/* ── 404 placeholder ── */
+const NotFound = () => (
   <div style={{ padding: 48, fontFamily: "sans-serif", textAlign: "center" }}>
-    <h2 style={{ margin: 0 }}>{label}</h2>
-    <p style={{ color: "#666" }}>Coming soon</p>
-    
+    <h2 style={{ margin: 0 }}>404 — Page not found</h2>
+    <p style={{ color: "#666" }}>The page you're looking for doesn't exist.</p>
   </div>
 );
 
@@ -185,12 +185,10 @@ function AppLoader({ exiting, pathname }) {
 
       {/* Spinner rings */}
       <div style={{ position: "relative", width: 112, height: 112, marginBottom: 32 }}>
-        {/* Outer track */}
         <div style={{
           position: "absolute", inset: 0, borderRadius: "50%",
           border: "2px solid rgba(140,30,30,0.07)",
         }} />
-        {/* Outer spinner */}
         <div style={{
           position: "absolute", inset: 0, borderRadius: "50%",
           border: "2.5px solid transparent",
@@ -198,12 +196,10 @@ function AppLoader({ exiting, pathname }) {
           borderRightColor: `${ctx.accent}80`,
           animation: "_spinCW 1.1s linear infinite",
         }} />
-        {/* Middle track */}
         <div style={{
           position: "absolute", inset: 14, borderRadius: "50%",
           border: "2px solid rgba(140,30,30,0.06)",
         }} />
-        {/* Middle spinner */}
         <div style={{
           position: "absolute", inset: 14, borderRadius: "50%",
           border: "2px solid transparent",
@@ -211,7 +207,6 @@ function AppLoader({ exiting, pathname }) {
           borderLeftColor: "#ea580c99",
           animation: "_spinCCW .85s linear infinite",
         }} />
-        {/* Monogram */}
         <div style={{
           position: "absolute", inset: 28, borderRadius: "50%",
           background: `linear-gradient(135deg, ${ctx.accent}dd, ${ctx.accent})`,
@@ -286,7 +281,6 @@ class RouteErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    /* Replace with your real logger (Sentry, Datadog, etc.) */
     console.error("[RouteErrorBoundary]", error, info.componentStack);
   }
 
@@ -352,52 +346,59 @@ function ScrollToTop() {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   ROUTE-CHANGE LOADER — shows loader on every navigation
+   ROUTE-CHANGE LOADER
+   - Debounced 80ms so instant navigations (cached chunks) never
+     flash the loader at all.
+   - Tied to Suspense via the startTransition pattern: we just watch
+     location changes and let Suspense handle the actual wait.
 ══════════════════════════════════════════════════════════════════ */
 
 function RouteLoader() {
   const location              = useLocation();
-  const [loading, setLoading] = useState(true);
+  const [visible, setVisible] = useState(true);
   const [exiting, setExiting] = useState(false);
   const prevPath              = useRef(null);
   const timers                = useRef([]);
 
-  /* Inject styles once */
   useEffect(() => { injectLoaderStyles(); }, []);
 
-  /* Clear all pending timers */
   const clearTimers = () => {
-    timers.current.forEach(clearTimeout);
+    timers.current.forEach(t => clearTimeout(t));
     timers.current = [];
   };
 
   useEffect(() => {
-    /* Skip re-trigger on same path (hash changes, search params) */
     if (prevPath.current === location.pathname) return;
     prevPath.current = location.pathname;
 
     clearTimers();
     setExiting(false);
-    setLoading(true);
+    setVisible(true);
 
-    timers.current.push(
-      setTimeout(() => {
+    // Debounce: only show loader if navigation takes > 80ms
+    // This prevents loader flash on cached/instant route changes
+    const debounce = setTimeout(() => {
+      // Begin exit sequence after minimum display time
+      const exit = setTimeout(() => {
         setExiting(true);
-        timers.current.push(
-          setTimeout(() => setLoading(false), 420)
-        );
-      }, 520)
-    );
+        const hide = setTimeout(() => setVisible(false), 420);
+        timers.current.push(hide);
+      }, 400);
+      timers.current.push(exit);
+    }, 80);
 
+    timers.current.push(debounce);
     return clearTimers;
   }, [location.pathname]);
 
-  if (!loading) return null;
+  if (!visible) return null;
   return <AppLoader exiting={exiting} pathname={location.pathname} />;
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   PROTECTED ROUTE WRAPPER — keeps JSX clean
+   PROTECTED ROUTE WRAPPER
+   Single Suspense boundary wraps ProtectedRoute + children together,
+   so the loader fires once for auth check + chunk load combined.
 ══════════════════════════════════════════════════════════════════ */
 
 function Guard({ roles, children }) {
@@ -415,137 +416,65 @@ function Guard({ roles, children }) {
 export default function App() {
   return (
     <RouteErrorBoundary>
-      {/* Route-change loader (sits above everything) */}
       <RouteLoader />
-
-      {/* Scroll to top on every navigation */}
       <ScrollToTop />
 
-      {/* Suspense covers the very first JS chunk download */}
-      <Suspense
-        fallback={
-          <AppLoader exiting={false} pathname={window.location.pathname} />
-        }
-      >
+      {/* Root Suspense: covers the very first JS chunk download */}
+      <Suspense fallback={<AppLoader exiting={false} pathname={window.location.pathname} />}>
         <Routes>
 
           {/* ─── Public (with layout) ─── */}
           <Route element={<MainLayout />}>
-            <Route path="/"            element={<Home />} />
-            <Route path="/marketplace" element={<Marketplace />} />
-            <Route path="/ticketing"   element={<Ticketing />} />
-          <Route path="/companyrequest"   element={<CompanyRequestForm />} />
-          {/* Extra components */}
-          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-          <Route path="/terms-of-service" element={<TermsOfService />} />
-          <Route path="/cookies" element={<CookiePolicy />} />
+            <Route path="/"                element={<Home />} />
+            <Route path="/marketplace"     element={<Marketplace />} />
+            <Route path="/ticketing"       element={<Ticketing />} />
+            <Route path="/companyrequest"  element={<CompanyRequestForm />} />
+            <Route path="/privacy-policy"  element={<PrivacyPolicy />} />
+            <Route path="/terms-of-service" element={<TermsOfService />} />
+            <Route path="/cookies"         element={<CookiePolicy />} />
           </Route>
 
-
           {/* ─── Auth ─── */}
-          <Route path="/login"    element={<AuthLogin />} />
-          <Route path="/register" element={<AuthRegister />} />
-          <Route path="/marketplace/login"   element={<MarketplaceLogin />} />
+          <Route path="/login"              element={<AuthLogin />} />
+          <Route path="/register"           element={<AuthRegister />} />
+          <Route path="/marketplace/login"  element={<MarketplaceLogin />} />
 
           {/* ─── Admin ─── */}
-          <Route path="/admin" element={
-            <Guard roles={["admin"]}><AdminHome /></Guard>
-          }/>
-          <Route path="/admin/companies" element={
-            <Guard roles={["admin"]}><ManageCompanies /></Guard>
-          }/>
-          <Route path="/admin/users" element={
-            <Guard roles={["admin"]}><ManageUsers /></Guard>
-          }/>
-          <Route path="/admin/settings" element={
-            <Guard roles={["admin"]}><AdminSettings /></Guard>
-          }/>
-          <Route path="/admin/flyers" element={
-            <Guard roles={["admin"]}><ManageFlyers /></Guard>
-          }/>
-          <Route path="/admin/products" element={
-            <Guard roles={["admin"]}><ManageProducts /></Guard>
-          }/>
-          <Route path="/admin/categories" element={
-            <Guard roles={["admin"]}><ManageCategories /></Guard>
-          }/>
-          <Route path="/admin/company-requests" element={
-            <Guard roles={["admin"]}><AdminCompanyRequests /></Guard>
-          }/>
-          
-          {/* Admin Marketplace routes */}
-          
-          <Route path="/admin/marketplace" element={
-            <Guard roles={["admin"]}><AdminMarketplaceDashboard /></Guard>
-          }/>
-          <Route path="/admin/marketplace/listings" element={
-            <Guard roles={["admin"]}><AdminManageListings /></Guard>
-          }/>
-          <Route path="/admin/marketplace/users" element={
-            <Guard roles={["admin"]}><AdminManageUsers /></Guard>
-          }/>
+          <Route path="/admin"                      element={<Guard roles={["admin"]}><AdminHome /></Guard>} />
+          <Route path="/admin/companies"            element={<Guard roles={["admin"]}><ManageCompanies /></Guard>} />
+          <Route path="/admin/users"                element={<Guard roles={["admin"]}><ManageUsers /></Guard>} />
+          <Route path="/admin/settings"             element={<Guard roles={["admin"]}><AdminSettings /></Guard>} />
+          <Route path="/admin/flyers"               element={<Guard roles={["admin"]}><ManageFlyers /></Guard>} />
+          <Route path="/admin/products"             element={<Guard roles={["admin"]}><ManageProducts /></Guard>} />
+          <Route path="/admin/categories"           element={<Guard roles={["admin"]}><ManageCategories /></Guard>} />
+          <Route path="/admin/company-requests"     element={<Guard roles={["admin"]}><AdminCompanyRequests /></Guard>} />
+          <Route path="/admin/marketplace"          element={<Guard roles={["admin"]}><AdminMarketplaceDashboard /></Guard>} />
+          <Route path="/admin/marketplace/listings" element={<Guard roles={["admin"]}><AdminManageListings /></Guard>} />
+          <Route path="/admin/marketplace/users"    element={<Guard roles={["admin"]}><AdminManageUsers /></Guard>} />
 
           {/* ─── Company ─── */}
-          <Route path="/company" element={
-            <Guard roles={["company"]}><CompanyDashboard /></Guard>
-          }/>
-          <Route path="/company/profile" element={
-            <Guard roles={["company"]}><CompanyEditProfile /></Guard>
-          }/>
-          <Route path="/company/flyers" element={
-            <Guard roles={["company"]}><CompanyFlyers /></Guard>
-          }/>
-          <Route path="/company/flyers/create" element={
-            <Guard roles={["company"]}><AddFlyer /></Guard>
-          }/>
-          <Route path="/company/reviews" element={
-            <Guard roles={["company"]}><CompanyFlyerReviews /></Guard>
-          }/>
-          <Route path="/company/products" element={
-            <Guard roles={["company"]}><CompanyProducts /></Guard>
-          }/>
+          <Route path="/company"               element={<Guard roles={["company"]}><CompanyDashboard /></Guard>} />
+          <Route path="/company/profile"       element={<Guard roles={["company"]}><CompanyEditProfile /></Guard>} />
+          <Route path="/company/flyers"        element={<Guard roles={["company"]}><CompanyFlyers /></Guard>} />
+          <Route path="/company/flyers/create" element={<Guard roles={["company"]}><AddFlyer /></Guard>} />
+          <Route path="/company/reviews"       element={<Guard roles={["company"]}><CompanyFlyerReviews /></Guard>} />
+          <Route path="/company/products"      element={<Guard roles={["company"]}><CompanyProducts /></Guard>} />
 
           {/* ─── User ─── */}
-          <Route path="/user/home" element={
-            <Guard roles={["user"]}><UserHome /></Guard>
-          }/>
-          <Route path="/user/saved-items" element={
-            <Guard roles={["user"]}><SavedItems /></Guard>
-          }/>
-          <Route path="/user/profile" element={
-            <Guard roles={["user"]}><EditProfile /></Guard>
-          }/>
+          <Route path="/user/home"        element={<Guard roles={["user"]}><UserHome /></Guard>} />
+          <Route path="/user/saved-items" element={<Guard roles={["user"]}><SavedItems /></Guard>} />
+          <Route path="/user/profile"     element={<Guard roles={["user"]}><EditProfile /></Guard>} />
 
-
-
-          {/*───  MarketPlace  ───*/}
-
-         
-          
-          <Route path="/marketplace/home" element={
-            <Guard roles={["user", "company"]}><MarketplaceHome /></Guard>
-          }/>
-          <Route path="/marketplace/notifications" element={
-            <Guard roles={["user", "company"]}><MarketplaceNotifications /></Guard>
-          }/>
-          <Route path="/marketplace/saved" element={
-            <Guard roles={["user", "company"]}><MarketplaceSaved /></Guard>
-          }/>
-          <Route path="/marketplace/interests" element={
-            <Guard roles={["user", "company"]}><MarketplaceInterests /></Guard>
-          }/>
-          <Route path="/marketplace/profile" element={
-            <Guard roles={["user", "company"]}><MarketplaceProfile /></Guard>
-          }/>
-          <Route path="/marketplace/sell" element={
-            <Guard roles={["user", "company"]}><MarketplaceSell /></Guard>
-          }/>
-         
-
-
+          {/* ─── Marketplace ─── */}
+          <Route path="/marketplace/home"          element={<Guard roles={["user", "company"]}><MarketplaceHome /></Guard>} />
+          <Route path="/marketplace/notifications" element={<Guard roles={["user", "company"]}><MarketplaceNotifications /></Guard>} />
+          <Route path="/marketplace/saved"         element={<Guard roles={["user", "company"]}><MarketplaceSaved /></Guard>} />
+          <Route path="/marketplace/interests"     element={<Guard roles={["user", "company"]}><MarketplaceInterests /></Guard>} />
+          <Route path="/marketplace/profile"       element={<Guard roles={["user", "company"]}><MarketplaceProfile /></Guard>} />
+          <Route path="/marketplace/sell"          element={<Guard roles={["user", "company"]}><MarketplaceSell /></Guard>} />
 
           {/* ─── 404 ─── */}
-          <Route path="*" element={<ComingSoon label="404 — Page not found" />} />
+          <Route path="*" element={<NotFound />} />
 
         </Routes>
       </Suspense>

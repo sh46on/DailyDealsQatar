@@ -2,17 +2,17 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { X, ArrowLeft, ArrowRight, FileText, Minus, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
 import  {BASE_URL}  from "../../api/api";
-
+// import workerSrc from "pdfjs-dist/build/pdf.worker.min.js?url";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
-pdfjs.GlobalWorkerOptions.workerSrc =
-  `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.js',
+  import.meta.url,
+).toString()
 
 const PDF_OPTIONS = {
-  cMapUrl:             `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
-  cMapPacked:          true,
-  standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/standard_fonts/`,
+  cMapPacked: true,
 };
 
 /* ── Category themes (maroon/white palette) ─────── */

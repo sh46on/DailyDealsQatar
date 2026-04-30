@@ -93,15 +93,9 @@ urlpatterns = [
     path("auth/company/flyers/create/", CompanyFlyerCreateAPIView.as_view()),
     path("auth/company/flyers/reviews/", CompanyFlyerReviewsAPIView.as_view()),
     path("auth/company/products/create/", CompanyProductListCreateAPIView.as_view()),
-    path(
-        "auth/company/products/<int:pk>/update/", CompanyProductUpdateAPIView.as_view()
-    ),
-    path(
-        "auth/company/products/<int:pk>/delete/", CompanyProductDeleteAPIView.as_view()
-    ),
-    path(
-        "auth/company/products/<int:pk>/toggle/", CompanyProductToggleAPIView.as_view()
-    ),
+    path("auth/company/products/<int:pk>/update/", CompanyProductUpdateAPIView.as_view()),
+    path("auth/company/products/<int:pk>/delete/", CompanyProductDeleteAPIView.as_view()),
+    path("auth/company/products/<int:pk>/toggle/", CompanyProductToggleAPIView.as_view()),
     # User
     path("auth/user/navbar/", UserNavbarAPIView.as_view()),
     path("auth/user/dashboard/", UserDashboardAPIView.as_view()),

@@ -16,16 +16,17 @@ import {
 import { Document, Page, pdfjs } from "react-pdf";
 import { getImageUrl } from "../api/media";
 import ReviewModal from "./modal/ReviewModal";
+// import workerSrc from "pdfjs-dist/build/pdf.worker.min.js?url";
 
 const BASE = BASE_URL;
 
-pdfjs.GlobalWorkerOptions.workerSrc =
-  `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.js',
+  import.meta.url,
+).toString()
 
 const PDF_OPTIONS = {
-  cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
   cMapPacked: true,
-  standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/standard_fonts/`,
 };
 
 /* ─── DESIGN TOKENS ─── */
@@ -618,8 +619,8 @@ function HeroSection({ data }) {
         <div className="hero-quick-cats">
           {Object.entries(CAT_META).slice(0, 5).map(([key, m]) => (
             <div key={key} className="hero-cat-tag" style={{ background: m.accent + "20", borderColor: m.accent + "40" }}>
-              <m.Icon size={10} color={m.accent} />
-              <span style={{ color: m.accent }}>{m.label}</span>
+              <m.Icon size={10} color={'white'} />
+              {/* <span style={{ color: m.accent }}>{m.label}</span> */}
             </div>
           ))}
         </div>

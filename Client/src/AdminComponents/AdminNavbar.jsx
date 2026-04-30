@@ -8,8 +8,8 @@ const FONT = "'DM Sans', sans-serif";
 
 const NAV_TABS = [
   { label: "Offers",      path: "/admin" },
-  { label: "Marketplace", path: "/admin/marketplace",  },
-  { label: "Ticketing",   path: "/admin/ticketing" },
+  { label: "Marketplace", path: "/admin/marketplace"  },
+  { label: "Ticketing",   path: "/admin/ticketing",  disabled: true },
 ];
 
 // ─── SVG Background ───────────────────────────────────────────────

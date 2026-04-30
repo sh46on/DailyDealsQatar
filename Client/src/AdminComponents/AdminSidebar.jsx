@@ -23,7 +23,7 @@ const MENUS = {
   marketplace: [
     { label: "Overview",          icon: BarChart2,       path: "/admin/marketplace" },
     { label: "Manage Listings",          icon: ShoppingBag,     path: "/admin/marketplace/listings" },
-    { label: "Manage Users",             icon: Users,           path: "/admin/marketplace/users" },
+    { label: "Marketplace Accounts",             icon: Users,           path: "/admin/marketplace/users" },
   ],
   ticketing: [
     { label: "Overview",          icon: BarChart2,       path: "/admin/ticketing" },

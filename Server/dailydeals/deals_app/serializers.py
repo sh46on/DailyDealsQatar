@@ -279,12 +279,11 @@ class AdminDashboardSerializer(serializers.Serializer):
     total_categories = serializers.IntegerField()
     total_flyers = serializers.IntegerField()
     total_reviews = serializers.IntegerField()
-
     active_products = serializers.IntegerField()
     featured_products = serializers.IntegerField()
-
+    server_time          = serializers.DateTimeField()
+    category_views       = serializers.ListField()
     total_saved_products = serializers.IntegerField()
-
     top_products = serializers.ListField()
     recent_users = serializers.ListField()
 

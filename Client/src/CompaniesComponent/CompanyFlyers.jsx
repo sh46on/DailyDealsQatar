@@ -1,26 +1,29 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { deleteFlyer, toggleFlyer } from "./api/companyApi";
+import { deleteFlyer, toggleFlyer, getCompanyFlyers } from "./api/companyApi";
 import CompanyLayout from "../CompaniesComponent/CompanyLayout";
-import BASE_API, { getCompanyFlyers } from "./api/companyApi";
-import {API_URL} from "../api/api"
+import { API_URL } from "../api/api";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { FileText, ChevronLeft, ChevronRight, X, ZoomIn } from "lucide-react";
 
-const BASE = BASE_API;
+/* ─────────────────────────────────────────────────────────────────
+   SAFE BASE URL  — guard against API_URL being a function/undefined
+───────────────────────────────────────────────────────────────── */
+const BASE =
+  typeof API_URL === "string" && API_URL.startsWith("http")
+    ? API_URL.replace(/\/$/, "")          // strip trailing slash
+    : "http://localhost:8000";
 
 /* ─────────────────────────────────────────────────────────────────
    PDF.JS WORKER
 ───────────────────────────────────────────────────────────────── */
-pdfjs.GlobalWorkerOptions.workerSrc =
-  `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.js",
+  import.meta.url
+).toString();
 
-const PDF_OPTIONS = {
-  cMapUrl:             `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
-  cMapPacked:          true,
-  standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/standard_fonts/`,
-};
+const PDF_OPTIONS = { cMapPacked: true };
 
 /* ─────────────────────────────────────────────────────────────────
    PDF Modal palette
@@ -41,19 +44,34 @@ const CAT_COLORS = {
 };
 const getCat = (id) => CAT_COLORS[id] || { bg: "#F8F9FA", accent: "#E30613" };
 
+/* ─────────────────────────────────────────────────────────────────
+   buildPdfUrl
+   Accepts a raw string from the API (may be relative, absolute,
+   URL-encoded, or wrapped in quotes) and always returns a full URL.
+───────────────────────────────────────────────────────────────── */
 function buildPdfUrl(raw) {
   if (!raw) return null;
+
+  // Guard: if someone passes a non-string (e.g. a function), bail out
+  if (typeof raw !== "string") return null;
+
   let url = raw.replace(/["']/g, "").trim();
-  try { url = decodeURIComponent(url); } catch (_) {}
-  if (url.startsWith("/media/") || url.startsWith("/static/")) {
-    url = API_URL + url;
-  } else if (url.startsWith("/") && !url.startsWith("//")) {
-    url = window.location.origin + url;
+
+  // Decode percent-encoded chars (e.g. %20 → space)
+  try { url = decodeURIComponent(url); } catch { /* keep as-is */ }
+
+  // Already absolute
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("blob:")) {
+    return url;
   }
-  if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("blob:")) {
-    url = "https://" + url;
+
+  // Relative path — prepend BASE
+  if (url.startsWith("/")) {
+    return `${BASE}${url}`;
   }
-  return url;
+
+  // No scheme, no leading slash — best effort
+  return `https://${url}`;
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -306,6 +324,7 @@ function PdfModal({ pdf, onClose }) {
     setScale(1.2); setSlideKey(0); setSlideDir("");
   }, [pdf?.url]);
 
+  // ── FIX: build the URL here, not in FlyerCard ──
   const pdfUrl = useMemo(() => buildPdfUrl(pdf?.url), [pdf?.url]);
 
   const onDocumentLoadSuccess = useCallback(({ numPages: n }) => {
@@ -506,6 +525,9 @@ function FlyerCard({ flyer, delay, onToggle, onDelete, onView }) {
   const waveFill = isActive ? "%23f5f3ff" : "%23f8fafc";
   const waveSrc  = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 40' preserveAspectRatio='none'%3E%3Cpath d='M0,20 C66,40 133,4 200,20 C267,38 334,4 400,20 L400,40 L0,40 Z' fill='${waveFill}'/%3E%3C/svg%3E`;
 
+  // ── FIX: pass the raw pdf path — buildPdfUrl (in PdfModal) handles the rest ──
+  const rawPdf = typeof flyer.pdf === "string" ? flyer.pdf : "";
+
   return (
     <div className="cf-card cf-up" style={{ animationDelay: `${0.14 + delay * 0.09}s` }}>
       <div className="cf-card-body">
@@ -549,13 +571,13 @@ function FlyerCard({ flyer, delay, onToggle, onDelete, onView }) {
       <div className="cf-divider" />
       <div className="cf-actions">
 
-        {/* ── View PDF → opens PdfModal ── */}
+        {/* ── View PDF → passes raw path; buildPdfUrl resolves it ── */}
         <button
           className="cf-btn cf-btn-view"
           onClick={() => onView({
-            url:        `${BASE}${flyer.pdf}`,
+            url:        rawPdf,        // ← raw value only; no BASE concatenation here
             title:      flyer.title,
-            catColorId: 8,   // purple accent — matches the page theme
+            catColorId: 8,
           })}
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
@@ -623,7 +645,7 @@ export default function CompanyFlyers() {
       const res = await getCompanyFlyers();
       setFlyers(res.data);
     } catch (err) {
-      console.error(err);
+      console.error("Failed to load flyers:", err);
     } finally {
       setLoading(false);
     }
@@ -636,9 +658,15 @@ export default function CompanyFlyers() {
   };
 
   const handleToggle = async (id) => {
-    await toggleFlyer(id);
-    loadFlyers();
-  };
+  try {
+    const res = await toggleFlyer(id);
+    console.log("Toggle response:", res); // check what comes back
+    await loadFlyers();
+  } catch (err) {
+    console.error("Toggle failed:", err);
+    alert("Failed to toggle flyer status.");
+  }
+};
 
   const visible = flyers.filter(f => {
     const matchFilter =
@@ -689,7 +717,6 @@ export default function CompanyFlyers() {
                       aria-label="Search flyers"
                     />
                   </div>
-                  
                 </div>
               </div>
 

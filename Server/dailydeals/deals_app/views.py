@@ -27,85 +27,33 @@ User = get_user_model()
 logger = logging.getLogger(__name__)
 
 
+from django.db.models import F
+from rest_framework.views import APIView
+from rest_framework.response import Response
+
+class ProductDetailAPIView(APIView):
+    def get(self, request, slug):
+        product = Product.objects.get(slug=slug, is_active=True)
+
+        # atomic increment
+        Product.objects.filter(id=product.id).update(
+            view_count=F("view_count") + 1
+        )
+
+        product.refresh_from_db()
+
+        return Response({
+            "success": True,
+            "data": ProductSerializer(product).data
+        })
+
+
+
 class StandardPagination(PageNumberPagination):
     page_size = 12
     page_size_query_param = "page_size"
     max_page_size = 50
 
-
-#-------------------------------
-# class HomePageAPIView(APIView):
-#     permission_classes = []
-
-#     def get(self, request):
-#         category_id = request.GET.get("category")
-#         sub_id = request.GET.get("sub")
-
-#         # ---------- CACHE + FALLBACK ----------
-#         try:
-#             companies = cache.get("homepage_companies")
-#             categories = cache.get("homepage_categories")
-
-#             if companies is None or categories is None:
-#                 try:
-#                     refresh_homepage_cache()
-#                 except Exception:
-#                     pass  # celery may be down
-
-#                 from deals_app.service import get_homepage_data
-#                 companies_qs, categories_qs = get_homepage_data()
-
-#                 companies = CompanySerializer(companies_qs, many=True).data
-#                 categories = CategorySerializer(categories_qs, many=True).data
-
-#         except Exception as e:
-#             logger.error(f"Cache error: {str(e)}")
-
-#             from deals_app.service import get_homepage_data
-#             companies_qs, categories_qs = get_homepage_data()
-
-#             companies = CompanySerializer(companies_qs, many=True).data
-#             categories = CategorySerializer(categories_qs, many=True).data
-
-#         # ---------- PRODUCTS ----------
-#         products = Product.objects.filter(is_active=True)
-
-#         if category_id:
-#             products = products.filter(category_id=category_id)
-
-#         if sub_id:
-#             products = products.filter(subcategory_id=sub_id)
-
-#         products = products.select_related(
-#             "category", "subcategory", "company"
-#         ).order_by("-created_at")
-
-#         # ---------- PAGINATION ----------
-#         paginator = StandardPagination()
-#         paginated_products = paginator.paginate_queryset(products, request)
-
-#         products_data = ProductSerializer(paginated_products, many=True).data
-
-#         # ---------- FLYERS (OPTIONAL PAGINATION) ----------
-#         flyers = DealFlyer.objects.filter(is_active=True)\
-#             .select_related("company")\
-#             .order_by("-created_at")
-
-#         paginated_flyers = paginator.paginate_queryset(flyers, request)
-#         flyers_data = DealFlyerSerializer(paginated_flyers, many=True).data
-
-#         # ---------- RESPONSE ----------
-#         response = paginator.get_paginated_response(products_data)
-#         response.data.update({
-#             "success": True,
-#             "companies": companies if companies else [],
-#             "categories": categories if categories else [],
-            
-#             "pdfs": flyers_data,
-#         })
-#         return response
-
-#-------------------------------
 
 from rest_framework.exceptions import NotFound
 
@@ -123,9 +71,13 @@ class HomePageAPIView(APIView):
     permission_classes = []
 
     def get(self, request):
-        category_id = request.GET.get("category")
-        sub_id      = request.GET.get("sub")
+        category_id   = request.GET.get("category")
+        sub_id        = request.GET.get("sub")
+        company_id    = request.GET.get("company")   # for flyer company filter
+        category_type = request.GET.get("type")      # for flyer type filter
+        product_paginator = SeparateParamPagination(page_query_param="page")
 
+        # paginated_products = product_paginator.paginate_queryset(products, request)
         # ---------- CACHE ----------
         try:
             companies  = cache.get("homepage_companies")
@@ -148,7 +100,7 @@ class HomePageAPIView(APIView):
             companies  = CompanySerializer(companies_qs,  many=True).data
             categories = CategorySerializer(categories_qs, many=True).data
 
-        # ---------- PRODUCTS  (param: ?page=N) ----------
+        # ---------- PRODUCTS  (param: ?page=N) — unchanged ----------
         products = (
             Product.objects
             .filter(is_active=True)
@@ -160,7 +112,6 @@ class HomePageAPIView(APIView):
             products = products.filter(subcategory_id=sub_id)
         products = products.order_by("-created_at")
 
-        product_paginator = SeparateParamPagination(page_query_param="page")
 
         try:
             paginated_products = product_paginator.paginate_queryset(products, request)
@@ -178,7 +129,7 @@ class HomePageAPIView(APIView):
 
         products_data = ProductSerializer(paginated_products, many=True).data
 
-        # ---------- FLYERS  (param: ?flyer_page=N) ----------
+        # ---------- FLYERS ----------
         flyers = (
             DealFlyer.objects
             .filter(is_active=True)
@@ -186,16 +137,45 @@ class HomePageAPIView(APIView):
             .order_by("-created_at")
         )
 
-        flyer_paginator = SeparateParamPagination(page_query_param="flyer_page")
+        # Apply filters when provided
+        if company_id:
+            try:
+                flyers = flyers.filter(company_id=int(company_id))
+            except (ValueError, TypeError):
+                pass  # ignore malformed company_id
 
-        try:
-            flyers_page = flyer_paginator.paginate_queryset(flyers, request)
-        except NotFound:
-            flyers_page = []
+        if category_type:
+            flyers = flyers.filter(category_type__iexact=category_type.strip())
 
-        flyers_data  = DealFlyerSerializer(flyers_page, many=True).data
-        flyers_count = flyers.count()
+        # Only paginate when NO filters are active (i.e. "All Offers" with no company).
+        # When filtering by type or company, return ALL matching flyers so the frontend
+        # can display them without pagination controls.
+        use_flyer_pagination = not company_id and not category_type
 
+        if use_flyer_pagination:
+            flyer_paginator = SeparateParamPagination(page_query_param="flyer_page")
+            try:
+                flyers_page = flyer_paginator.paginate_queryset(flyers, request)
+            except NotFound:
+                flyers_page = []
+            flyers_data  = DealFlyerSerializer(flyers_page or [], many=True).data
+            flyers_count = flyers.count()
+            flyers_next  = flyer_paginator.get_next_link()     if flyers_page else None
+            flyers_prev  = flyer_paginator.get_previous_link() if flyers_page else None
+        else:
+            # Return all matching flyers — no pagination
+            all_flyers   = list(flyers)
+            flyers_data  = DealFlyerSerializer(all_flyers, many=True).data
+            flyers_count = len(all_flyers)
+            flyers_next  = None
+            flyers_prev  = None
+            
+        ids = [obj.id for obj in paginated_products] if paginated_products else []
+
+        if ids:
+            Product.objects.filter(id__in=ids).update(
+                view_count=F("view_count") + 1
+            )
         # ---------- RESPONSE ----------
         response = product_paginator.get_paginated_response(products_data)
 
@@ -203,11 +183,11 @@ class HomePageAPIView(APIView):
             "success":    True,
             "companies":  companies  or [],
             "categories": categories or [],
-            "products":   response.data.get("results"),
+            "products":   response.data.get("results", []),
             "pdfs": {
                 "count":    flyers_count,
-                "next":     flyer_paginator.get_next_link() if flyers_page else None,
-                "previous": flyer_paginator.get_previous_link() if flyers_page else None,
+                "next":     flyers_next,
+                "previous": flyers_prev,
                 "results":  flyers_data,
             },
         })
@@ -225,61 +205,70 @@ class CurrentUserAPIView(APIView):
         return Response(serializer.data)
 
 
+from django.utils.timezone import now
 class AdminDashboardAPIView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
+        from django.db.models import Sum
+
         try:
-            #  Basic Counts
-            total_users = User.objects.count()
-            total_companies = Company.objects.count()
-            total_products = Product.objects.count()
-            total_categories = Category.objects.count()
-            total_flyers = DealFlyer.objects.count()
-            total_reviews = ProductReview.objects.count()
-
-            #  Product Stats
-            active_products = Product.objects.filter(is_active=True).count()
-            featured_products = Product.objects.filter(is_featured=True).count()
-
-            #  Saved Products
+            # ── Counts ──
+            total_users          = User.objects.count()
+            total_companies      = Company.objects.count()
+            total_products       = Product.objects.count()
+            total_categories     = Category.objects.count()
+            total_flyers         = DealFlyer.objects.count()
+            total_reviews        = ProductReview.objects.count()
+            active_products      = Product.objects.filter(is_active=True).count()
+            featured_products    = Product.objects.filter(is_featured=True).count()
             total_saved_products = SavedProduct.objects.count()
 
-            #  Top Products (by views)
-            top_products_qs = Product.objects.only("name", "view_count").order_by(
-                "-view_count"
-            )[:5]
-            top_products = [
-                {"name": p.name, "views": p.view_count} for p in top_products_qs
+            # ── Category views ──
+            category_views = [
+                {"name": c["name"], "views": c["total_views"] or 0}
+                for c in (
+                    Category.objects
+                    .annotate(total_views=Sum("products__view_count"))
+                    .values("name", "total_views")
+                    .order_by("-total_views")[:6]
+                )
             ]
 
-            #  Recent Users
-            recent_users_qs = User.objects.only("phone", "role").order_by(
-                "-date_joined"
-            )[:5]
-            recent_users = [{"phone": u.phone, "role": u.role} for u in recent_users_qs]
+            # ── Top products ──
+            top_products = [
+                {
+                    "name": p.name,
+                    "views": p.view_count,
+                    "category": p.category.name if p.category else "Uncategorized",
+                }
+                for p in Product.objects.select_related("category").order_by("-view_count")[:5]
+            ]
 
-            data = {
-                "total_users": total_users,
-                "total_companies": total_companies,
-                "total_products": total_products,
-                "total_categories": total_categories,
-                "total_flyers": total_flyers,
-                "total_reviews": total_reviews,
-                "active_products": active_products,
-                "featured_products": featured_products,
+            # ── Recent users ──
+            recent_users = [
+                {"phone": u.phone, "role": u.role}
+                for u in User.objects.only("phone", "role").order_by("-date_joined")[:5]
+            ]
+
+            return Response({
+                "total_users":          total_users,
+                "total_companies":      total_companies,
+                "total_products":       total_products,
+                "total_categories":     total_categories,
+                "total_flyers":         total_flyers,
+                "total_reviews":        total_reviews,
+                "active_products":      active_products,
+                "featured_products":    featured_products,
                 "total_saved_products": total_saved_products,
-                "top_products": top_products,
-                "recent_users": recent_users,
-                "server_time": now(),
-            }
-
-            serializer = AdminDashboardSerializer(data)
-            return Response(serializer.data)
+                "top_products":         top_products,
+                "recent_users":         recent_users,
+                "category_views":       category_views,
+                "server_time":          now(),
+            })
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
-
 
 class AdminCompanyListCreateAPIView(APIView):
     permission_classes = [IsAdminUser]
@@ -694,8 +683,8 @@ class CompanyDashboardAPIView(APIView):
         data = {
             "company": company.name,
             "profilePic": company.logo.url if company.logo else None,
-            "total_products_saved": SavedProduct.objects.filter(
-                product__company=company
+            "total_products_saved": Product.objects.filter(
+                company=company
             ).count(),
             "total_flyers_saved": SavedProduct.objects.filter(
                 flyer__company=company
@@ -825,6 +814,7 @@ class CompanyFlyerCreateAPIView(APIView):
                         product, created = Product.objects.get_or_create(
                             company=user.company,
                             name=name.strip(),
+                            is_featured = True,
                             defaults={
                                 "price": price,
                                 "old_price": old_price,
@@ -923,8 +913,8 @@ class CompanyFlyerToggleAPIView(APIView):
         company = request.user.company
         flyer = get_object_or_404(DealFlyer, id=pk, company=company)
 
-        flyer.is_active = not flyer.is_active
-        flyer.save()
+        DealFlyer.objects.filter(id=pk).update(is_active=not flyer.is_active)
+        flyer.refresh_from_db() 
 
         return Response({"success": True, "is_active": flyer.is_active})
 
@@ -1075,7 +1065,7 @@ class UserDashboardAPIView(APIView):
 
     def get(self, request):
         user = request.user
-
+        Product.objects.update(view_count=F("view_count") + 1)
         products = Product.objects.filter(is_active=True).select_related("company")
 
         flyers = DealFlyer.objects.filter(is_active=True).select_related("company").annotate(

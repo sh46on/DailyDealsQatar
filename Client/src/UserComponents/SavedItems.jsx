@@ -12,9 +12,14 @@ import { useNavigate } from "react-router-dom";
 import { Document, Page, pdfjs } from "react-pdf";
 import FlyerModal from "./modal/FlyerModal";
 import {BASE_URL} from "./api/userApi"
+// import workerSrc from "pdfjs-dist/build/pdf.worker.min.js?url";
+
 
 // PDF.js worker setup
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.js',
+  import.meta.url,
+).toString()
 
 
 export default function SavedItems() {
@@ -274,8 +279,8 @@ export default function SavedItems() {
                           <Package size={48} strokeWidth={1} color={meta.color} />
                         </div>
                         <div className="si-thumb-overlay">
-                          <Eye size={20} />
-                          <span>View Product</span>
+                          {/* <Eye size={20} />
+                          <span>View Product</span> */}
                         </div>
                       </>
                     )}
@@ -292,9 +297,9 @@ export default function SavedItems() {
                     <h3 className="si-card-title">{isFlyer ? data.title : data.name}</h3>
                     {!isFlyer && data?.price && (
                       <div className="si-price-wrapper">
-                        <p className="si-price">₹{parseFloat(data.price).toLocaleString()}</p>
+                        <p className="si-price">ر.ق{parseFloat(data.price).toLocaleString()}</p>
                         {data.old_price && (
-                          <p className="si-old-price">₹{parseFloat(data.old_price).toLocaleString()}</p>
+                          <p className="si-old-price">ر.ق{parseFloat(data.old_price).toLocaleString()}</p>
                         )}
                       </div>
                     )}
