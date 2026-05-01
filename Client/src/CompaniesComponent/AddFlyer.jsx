@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, lazy, Suspense } from "react";
 import { createFlyer } from "./api/companyApi";
-
-const CompanyLayout = lazy(() => import("../CompaniesComponent/CompanyLayout"));
+import CompanyLayout from "../CompaniesComponent/CompanyLayout"
+// const CompanyLayout = lazy(() => import("../CompaniesComponent/CompanyLayout"));
 
 /* ─────────────────────────────────────────────────────────────────
    Global styles — mirrors CompanyDashboard palette & motifs

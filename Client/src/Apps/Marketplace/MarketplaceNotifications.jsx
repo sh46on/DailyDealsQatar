@@ -1,4 +1,6 @@
-import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import React, {
+  useEffect, useState, useCallback, useMemo, useRef, lazy, Suspense,
+} from "react";
 import {
   fetchNotifications,
   markNotificationRead,
@@ -7,136 +9,256 @@ import {
 } from "./api/marketplaceApi";
 import MarketplaceLayout from "./MarketplaceLayout";
 
-/* ─── Design Tokens ─────────────────────────────────────────── */
-const BLUE   = "#1565c0";
-const BLUELT = "#e3f2fd";
-const FONT   = "'Plus Jakarta Sans', sans-serif";
-const FONT_D = "'Fraunces', serif";
+/* ─── Design Tokens ───────────────────────────────────────────────────────── */
+const C = {
+  ink:       "#0b0f1a",
+  inkMid:    "#2d3550",
+  inkLight:  "#6b7594",
+  ink3:      "#9ba3be",
+  line:      "#e6eaf5",
+  lineSoft:  "#f0f3fb",
+  bg:        "#f5f7fe",
+  white:     "#ffffff",
+  accent:    "#3d5afe",
+  accentDk:  "#1a237e",
+  accentLt:  "#e8ecff",
+  accentMid: "#c5ceff",
+  pend:      "#f59e0b",
+  pendBg:    "#fffbeb",
+  pendLine:  "#fde68a",
+  acpt:      "#10b981",
+  acptBg:    "#ecfdf5",
+  acptLine:  "#6ee7b7",
+  rjct:      "#ef4444",
+  rjctBg:    "#fef2f2",
+  rjctLine:  "#fca5a5",
+};
 
-/* ─── Global CSS ─────────────────────────────────────────────── */
-const GLOBAL_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:wght@700;900&display=swap');
-  *, *::before, *::after { box-sizing: border-box; }
+const F = {
+  display: "'DM Serif Display', Georgia, serif",
+  body:    "'DM Sans', system-ui, sans-serif",
+  mono:    "'DM Mono', monospace",
+};
 
-  @keyframes fadeUp    { from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:none;} }
-  @keyframes fadeIn    { from{opacity:0;}to{opacity:1;} }
-  @keyframes shimmer   { 0%{background-position:-600px 0;}100%{background-position:600px 0;} }
-  @keyframes floatOrb  { 0%,100%{transform:translateY(0);}50%{transform:translateY(-14px);} }
-  @keyframes waveSlide { to{transform:translateX(-50%);} }
-  @keyframes pulse     { 0%,100%{opacity:1;transform:scale(1);}50%{opacity:.45;transform:scale(1.35);} }
-  @keyframes spin      { to{transform:rotate(360deg);} }
-  @keyframes dotPulse  { 0%,100%{box-shadow:0 0 0 0 rgba(21,101,192,0.55);}60%{box-shadow:0 0 0 5px rgba(21,101,192,0);} }
-  @keyframes readFlash { 0%{background-color:${BLUELT};}100%{background-color:#ffffff;} }
-  @keyframes modalIn   { from{opacity:0;transform:translateY(20px) scale(0.982);}to{opacity:1;transform:translateY(0) scale(1);} }
-  @keyframes backdropIn{ from{opacity:0;}to{opacity:1;} }
+/* ─── Global CSS injection ────────────────────────────────────────────────── */
+const CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 
-  .mn-skel {
-    background: linear-gradient(90deg,#f0f4f8 25%,#e2ecf7 50%,#f0f4f8 75%);
-    background-size: 600px 100%;
-    animation: shimmer 1.4s linear infinite;
-    border-radius: 22px;
+  @keyframes fadeUp   { from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;} }
+  @keyframes fadeIn   { from{opacity:0;}to{opacity:1;} }
+  @keyframes shimmer  { 0%{background-position:-800px 0;}100%{background-position:800px 0;} }
+  @keyframes spin     { to{transform:rotate(360deg);} }
+  @keyframes pulse    { 0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(1.45);} }
+  @keyframes slideIn  { from{opacity:0;transform:translateY(22px) scale(0.98);}to{opacity:1;transform:none;} }
+  @keyframes bdIn     { from{opacity:0;}to{opacity:1;} }
+  @keyframes flashBg  { 0%{background:${C.accentLt};}100%{background:${C.white};} }
+  @keyframes marquee  { 0%{transform:translateX(0);}100%{transform:translateX(-50%);} }
+
+  .mn-skel{
+    background:linear-gradient(90deg,#eceef8 25%,#dde3f5 50%,#eceef8 75%);
+    background-size:800px 100%;
+    animation:shimmer 1.6s linear infinite;
+    border-radius:16px;
   }
 
-  .mn-card {
-    animation: fadeUp 0.32s cubic-bezier(0.22,1,0.36,1) both;
-    transition: transform .18s cubic-bezier(0.22,1,0.36,1), box-shadow .18s ease, border-color .18s ease;
-    cursor: pointer;
+  .mn-card{
+    animation:fadeUp .3s cubic-bezier(.22,1,.36,1) both;
+    transition:box-shadow .2s ease, border-color .2s ease, transform .2s ease;
+    will-change:transform;accent
+    cursor:pointer;
   }
-  .mn-card:hover {
-    transform: translateY(-3px) !important;
-    box-shadow: 0 14px 44px rgba(21,101,192,0.14), 0 2px 8px rgba(21,101,192,0.06) !important;
-    border-color: rgba(21,101,192,0.30) !important;
+  .mn-card:hover{
+    transform:translateY(-2px);
+    box-shadow:0 12px 40px rgba(61,90,254,.12),0 2px 8px rgba(61,90,254,.06)!important;
+    border-color:${C.accentMid}!important;
   }
-  .mn-card:active { transform: translateY(0) !important; }
-  .mn-card.flash  { animation: readFlash .5s ease forwards; }
+  .mn-card:active{transform:translateY(0) scale(.995);}
+  .mn-card.mn-flash{animation:flashBg .55s ease forwards;}
 
-  .mn-tab { transition: background .16s, color .16s, border-color .16s; cursor: pointer; border: none; }
-  .mn-tab:hover:not(.mn-tab-active) {
-    background: ${BLUELT} !important;
-    border-color: rgba(21,101,192,0.35) !important;
-    color: ${BLUE} !important;
+  .mn-tab{
+    cursor:pointer; border:none; outline:none;
+    transition:all .15s ease;
   }
-
-  .mn-mark-all { transition: background .16s, transform .12s, box-shadow .16s; }
-  .mn-mark-all:hover  { background: ${BLUELT} !important; transform:translateY(-1px); box-shadow:0 3px 10px rgba(21,101,192,.15); }
-  .mn-mark-all:active { transform:scale(.97); }
-
-  .mn-stat-pill { transition: background .2s, transform .2s; }
-  .mn-stat-pill:hover {
-    background: rgba(255,255,255,0.22) !important;
-    transform: translateY(-2px) !important;
+  .mn-tab:hover:not(.mn-tab-on){
+    background:${C.accentLt}!important;
+    color:${C.accent}!important;
+    border-color:${C.accentMid}!important;
   }
 
-  .mn-modal-close { transition: background .15s, transform .15s; }
-  .mn-modal-close:hover { background:rgba(239,68,68,.22)!important; transform:scale(1.12)!important; }
+  .mn-btn-mark{transition:all .15s ease; cursor:pointer;}
+  .mn-btn-mark:hover{background:${C.accentLt}!important; color:${C.accent}!important;}
 
-  .mn-status-btn { transition: background .16s, color .16s, border-color .16s, transform .12s, box-shadow .16s; cursor: pointer; }
-  .mn-status-btn:hover  { transform:translateY(-1px); box-shadow:0 4px 14px rgba(0,0,0,.12); }
-  .mn-status-btn:active { transform:scale(.96); }
-
-  .mn-footer-done { transition: transform .15s, box-shadow .15s; }
-  .mn-footer-done:hover { transform:translateY(-1px)!important; box-shadow:0 6px 20px rgba(21,101,192,.38)!important; }
-  .mn-btn-cancel  { transition: background .15s; }
-  .mn-btn-cancel:hover { background: ${BLUELT} !important; color: ${BLUE} !important; }
-
-  /* Smooth scroll in modal body */
-  .mn-modal-body {
-    overflow-y: auto;
-    scroll-behavior: smooth;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
+  .mn-status-btn{
+    cursor:pointer; outline:none;
+    transition:all .15s ease;
   }
-  .mn-modal-body::-webkit-scrollbar { width: 4px; }
-  .mn-modal-body::-webkit-scrollbar-track { background: transparent; }
-  .mn-modal-body::-webkit-scrollbar-thumb { background: #dde8f7; border-radius: 99px; }
-  .mn-modal-body::-webkit-scrollbar-thumb:hover { background: #b3cef0; }
-
-  @media(max-width:900px){
-    .mn-layout   { grid-template-columns: 1fr !important; }
-    .mn-sidebar  { display: none !important; }
-    .mn-sidebar-mobile { display: block !important; }
+  .mn-status-btn:hover:not(.mn-status-active){
+    transform:translateY(-1px);
+    box-shadow:0 3px 12px rgba(0,0,0,.12);
   }
-  @media(max-width:560px){
-    .mn-header-row { flex-direction:column!important; align-items:flex-start!important; gap:10px!important; }
-    .mn-modal-box  { max-width:calc(100vw - 16px)!important; max-height:96vh!important; }
+  .mn-status-btn:active{transform:scale(.96);}
+
+  .mn-modal-close{
+    cursor:pointer; border:none;
+    transition:all .15s ease;
+  }
+  .mn-modal-close:hover{background:rgba(239,68,68,.18)!important; transform:scale(1.1);}
+
+  .mn-done-btn{transition:all .15s ease; cursor:pointer;}
+  .mn-done-btn:hover{box-shadow:0 8px 24px rgba(61,90,254,.38)!important; transform:translateY(-1px)!important;}
+
+  .mn-cancel-btn{transition:all .15s ease; cursor:pointer;}
+  .mn-cancel-btn:hover{background:${C.accentLt}!important; color:${C.accent}!important;}
+
+  .mn-scroll::-webkit-scrollbar{width:4px;}
+  .mn-scroll::-webkit-scrollbar-track{background:transparent;}
+  .mn-scroll::-webkit-scrollbar-thumb{background:#d0d9f0;border-radius:9px;}
+  .mn-scroll::-webkit-scrollbar-thumb:hover{background:#b0bde8;}
+
+  @media(max-width:860px){
+    .mn-layout{grid-template-columns:1fr!important;}
+    .mn-sidebar{display:none!important;}
+  }
+  @media(max-width:520px){
+    .mn-header-row{flex-direction:column!important;align-items:flex-start!important;gap:10px!important;}
+    .mn-modal-wrap{max-width:calc(100vw - 16px)!important;max-height:96vh!important;}
+    .mn-stat-row{gap:6px!important;}
+    .mn-stat-pill{padding:6px 12px!important;font-size:11px!important;}
   }
 `;
 
 function InjectStyles() {
   useEffect(() => {
-    if (document.getElementById("mn-global-css")) return;
+    if (document.getElementById("mn-css")) return;
     const el = document.createElement("style");
-    el.id = "mn-global-css";
-    el.textContent = GLOBAL_CSS;
+    el.id = "mn-css";
+    el.textContent = CSS;
     document.head.appendChild(el);
   }, []);
   return null;
 }
 
-/* ─── Status config ─────────────────────────────────────────── */
-const STATUS_MAP = {
-  pending:  { bg:"#fffbeb", color:"#78350f", border:"#fde68a", dot:"#f59e0b", label:"Pending"  },
-  accepted: { bg:"#f0fdf4", color:"#14532d", border:"#86efac", dot:"#16a34a", label:"Accepted" },
-  rejected: { bg:"#fff1f2", color:"#881337", border:"#fecdd3", dot:"#e11d48", label:"Rejected" },
+/* ─── SVG Icon library ────────────────────────────────────────────────────── */
+const Icon = {
+  Bell: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+      <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+    </svg>
+  ),
+  Check: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  ),
+  CheckCircle: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+    </svg>
+  ),
+  X: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+  ),
+  XCircle: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+    </svg>
+  ),
+  Clock: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+    </svg>
+  ),
+  MapPin: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+    </svg>
+  ),
+  User: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+    </svg>
+  ),
+  Mail: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+    </svg>
+  ),
+  Phone: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.55a16 16 0 0 0 6.08 6.08l1.62-1.62a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+    </svg>
+  ),
+  Home: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+    </svg>
+  ),
+  Tag: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>
+    </svg>
+  ),
+  Eye: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+    </svg>
+  ),
+  Hash: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/>
+      <line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>
+    </svg>
+  ),
+  Package: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+    </svg>
+  ),
+  Info: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+    </svg>
+  ),
+  Activity: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    </svg>
+  ),
+  Inbox: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+      <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+    </svg>
+  ),
 };
-const STATUS_BTN = {
-  pending:  { activeBg:"#f59e0b", activeColor:"#fff", activeBorder:"#f59e0b" },
-  accepted: { activeBg:"#16a34a", activeColor:"#fff", activeBorder:"#16a34a" },
-  rejected: { activeBg:"#e11d48", activeColor:"#fff", activeBorder:"#e11d48" },
-};
-const getStatus = (s) =>
-  STATUS_MAP[s] ?? { bg:"#f0f4f8", color:"#475569", border:"#cbd5e1", dot:"#94a3b8", label: s ?? "Unknown" };
 
-const FILTERS = ["all", "pending", "accepted", "rejected"];
+/* ─── Status configuration ────────────────────────────────────────────────── */
+const STATUS = {
+  pending:  { bg:C.pendBg,  color:"#92400e", border:C.pendLine,  dot:C.pend,  label:"Pending",  bar:"linear-gradient(180deg,#fcd34d,#f59e0b)" },
+  accepted: { bg:C.acptBg,  color:"#065f46", border:C.acptLine,  dot:C.acpt,  label:"Accepted", bar:"linear-gradient(180deg,#6ee7b7,#10b981)" },
+  rejected: { bg:C.rjctBg,  color:"#991b1b", border:C.rjctLine,  dot:C.rjct,  label:"Rejected", bar:"linear-gradient(180deg,#fca5a5,#ef4444)" },
+};
+const STATUS_BTN_CFG = {
+  pending:  { activeBg:C.pend, activeColor:"#fff", activeBorder:C.pend },
+  accepted: { activeBg:C.acpt, activeColor:"#fff", activeBorder:C.acpt },
+  rejected: { activeBg:C.rjct, activeColor:"#fff", activeBorder:C.rjct },
+};
+const getStatus = (s) => STATUS[s] ?? { bg:C.lineSoft, color:C.inkLight, border:C.line, dot:C.ink3, label:s ?? "Unknown", bar:"#e0e7ff" };
+
+const FILTERS = ["all","pending","accepted","rejected"];
+
+/* ─── Helpers ─────────────────────────────────────────────────────────────── */
+const str     = (v)  => (typeof v === "string" && v.trim() ? v.trim() : null);
 const FALLBACK = "—";
-
-/* ─── Pure helpers ──────────────────────────────────────────── */
-const str = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const getBuyerName = (n) =>
   [str(n?.buyer_first_name), str(n?.buyer_last_name)].filter(Boolean).join(" ") || "Unknown Buyer";
 const getInitials = (name = "") => {
   const p = name.trim().split(" ").filter(Boolean);
-  return p.length >= 2 ? (p[0][0] + p[1][0]).toUpperCase() : name.slice(0,2).toUpperCase() || "?";
+  return p.length >= 2 ? (p[0][0]+p[1][0]).toUpperCase() : name.slice(0,2).toUpperCase() || "?";
 };
 const timeAgo = (d) => {
   if (!d) return "—";
@@ -146,252 +268,325 @@ const timeAgo = (d) => {
   if (s < 86400) return `${Math.floor(s/3600)}h ago`;
   return `${Math.floor(s/86400)}d ago`;
 };
-const formatDate = (d) =>
-  !d ? "—" : new Date(d).toLocaleString(undefined, { dateStyle:"medium", timeStyle:"short" });
-const formatPrice = (p) => {
-  const n = parseFloat(p);
-  if (isNaN(n)) return null;
-  return `ر.ق${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
-};
-const countByStatus = (items, status) =>
-  (Array.isArray(items) ? items : []).filter(i => i?.status === status).length;
+const formatDate  = (d) => !d ? "—" : new Date(d).toLocaleString(undefined, { dateStyle:"medium", timeStyle:"short" });
+const formatPrice = (p) => { const n = parseFloat(p); return isNaN(n) ? null : `ر.ق${n.toLocaleString("en-IN",{ maximumFractionDigits:0 })}`; };
+const countByStatus = (items, status) => (Array.isArray(items) ? items : []).filter(i => i?.status === status).length;
 
-/* ─── Ad Slot ───────────────────────────────────────────────── */
+/* ─── Ad Slot ─────────────────────────────────────────────────────────────── */
 function AdSlot({ variant = "leaderboard" }) {
-  const dims = variant === "leaderboard"
-    ? { h: 90,  label: "728 × 90 — Leaderboard Ad" }
-    : { h: 250, label: "300 × 250 — Medium Rectangle Ad" };
+  const h = variant === "leaderboard" ? 90 : 250;
+  const label = variant === "leaderboard" ? "728 × 90 — Leaderboard" : "300 × 250 — Rectangle";
   return (
     <div style={{
-      width:"100%", height:dims.h,
-      background:"repeating-linear-gradient(45deg,#f8fafc,#f8fafc 10px,#eef3fa 10px,#eef3fa 20px)",
-      border:"1.5px dashed #cbd5e1", borderRadius:14,
-      display:"flex", flexDirection:"column",
-      alignItems:"center", justifyContent:"center", gap:5,
+      width:"100%", height:h, borderRadius:12,
+      background:`repeating-linear-gradient(45deg,${C.bg},${C.bg} 8px,${C.lineSoft} 8px,${C.lineSoft} 16px)`,
+      border:`1.5px dashed ${C.line}`,
+      display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:4,
     }}>
-      <span style={{ fontSize:9.5, fontWeight:700, color:"#94a3b8", letterSpacing:"1px", fontFamily:FONT, textTransform:"uppercase" }}>
+      <span style={{ fontSize:9, fontWeight:700, color:C.ink3, letterSpacing:"1.5px", fontFamily:F.body, textTransform:"uppercase" }}>
         Advertisement
       </span>
-      <span style={{ fontSize:12, color:"#cbd5e1", fontFamily:FONT, fontWeight:600 }}>
-        {dims.label}
-      </span>
+      <span style={{ fontSize:11, color:C.line, fontFamily:F.mono, fontWeight:500 }}>{label}</span>
     </div>
   );
 }
 
-/* ─── Skeleton ───────────────────────────────────────────────── */
-function SkeletonList() {
+/* ─── Skeleton ────────────────────────────────────────────────────────────── */
+function SkeletonCard({ delay = 0 }) {
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-      {[...Array(4)].map((_, i) => (
-        <div key={i} className="mn-skel" style={{ height:110, animationDelay:`${i * 120}ms` }} />
-      ))}
-    </div>
+    <div className="mn-skel" style={{
+      height:104, animationDelay:`${delay}ms`,
+      border:`1px solid ${C.line}`,
+    }} />
   );
 }
 
-/* ─── Status Badge ───────────────────────────────────────────── */
+/* ─── Status Badge ────────────────────────────────────────────────────────── */
 function StatusBadge({ status }) {
   const st = getStatus(status);
   return (
     <span style={{
-      display:"inline-flex", alignItems:"center", gap:6,
-      background:st.bg, border:`1.5px solid ${st.border}`,
-      color:st.color, borderRadius:40, padding:"5px 12px",
-      fontFamily:FONT, fontSize:11, fontWeight:700,
-      letterSpacing:".06em", textTransform:"uppercase", width:"fit-content",
+      display:"inline-flex", alignItems:"center", gap:5,
+      background:st.bg, border:`1px solid ${st.border}`,
+      color:st.color, borderRadius:6, padding:"3px 10px",
+      fontFamily:F.body, fontSize:10.5, fontWeight:700,
+      letterSpacing:".08em", textTransform:"uppercase",
     }}>
       <span style={{
-        width:7, height:7, borderRadius:"50%", background:st.dot, flexShrink:0,
-        animation: status === "pending" ? "pulse 1.6s infinite" : undefined,
-      }} />
+        width:6, height:6, borderRadius:"50%", background:st.dot, flexShrink:0,
+        animation: status === "pending" ? "pulse 1.8s infinite" : undefined,
+      }}/>
       {st.label}
     </span>
   );
 }
 
-/* ─── Summary Sidebar Card ───────────────────────────────────── */
+/* ─── Avatar ──────────────────────────────────────────────────────────────── */
+function Avatar({ name, initials, image, size = 32 }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div style={{
+      width:size, height:size, borderRadius:"50%",
+      background:`linear-gradient(135deg,${C.accentLt},${C.accentMid})`,
+      display:"flex", alignItems:"center", justifyContent:"center",
+      fontSize:Math.round(size*.34), fontWeight:700, color:C.accent,
+      flexShrink:0, overflow:"hidden", fontFamily:F.body,
+      border:`1.5px solid ${C.line}`,
+    }}>
+      {image && !failed
+        ? <img src={image} alt={name} loading="lazy" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={() => setFailed(true)}/>
+        : initials
+      }
+    </div>
+  );
+}
+
+/* ─── Product Thumbnail ───────────────────────────────────────────────────── */
+function Thumb({ src, alt, size, fullHeight = false }) {
+  const [failed, setFailed] = useState(false);
+  const dim = typeof size === "number"
+    ? { width:size, height:size }
+    : { width:"100%", height: fullHeight ? "100%" : size };
+  if (src && !failed) {
+    return <img src={src} alt={alt} loading="lazy" decoding="async" style={{ ...dim, objectFit:"cover", display:"block" }} onError={() => setFailed(true)}/>;
+  }
+  return (
+    <div style={{
+      ...dim, background:`linear-gradient(135deg,${C.accentLt},${C.accentMid})`,
+      display:"flex", alignItems:"center", justifyContent:"center",
+    }}>
+      <Icon.Package width={typeof size === "number" ? Math.round(size*.38) : 28} height={typeof size === "number" ? Math.round(size*.38) : 28} style={{ color:C.accent }}/>
+    </div>
+  );
+}
+
+/* ─── Stat Pills ──────────────────────────────────────────────────────────── */
+function StatPills({ pending, accepted, rejected, total, unread }) {
+  const pills = [
+    { dot:C.pend, num:pending,  label:"Pending"  },
+    { dot:C.acpt, num:accepted, label:"Accepted" },
+    { dot:C.rjct, num:rejected, label:"Rejected" },
+    { dot:C.accent, num:total,  label:"Total"    },
+    { dot:"#a78bfa", num:unread, label:"Unread"  },
+  ];
+  return (
+    <div className="mn-stat-row" style={{ display:"flex", flexWrap:"wrap", gap:8, marginTop:24, animation:"fadeUp .4s ease .22s both" }}>
+      {pills.map(({ dot, num, label }) => (
+        <div key={label} style={{
+          display:"inline-flex", alignItems:"center", gap:8,
+          background:"rgba(255,255,255,0.11)", backdropFilter:"blur(10px)",
+          border:"1px solid rgba(255,255,255,0.2)",
+          borderRadius:8, padding:"7px 16px", className:"mn-stat-pill",
+          fontFamily:F.body, fontSize:12, fontWeight:500, color:"#fff",
+        }}>
+          <span style={{ width:8, height:8, borderRadius:"50%", background:dot, flexShrink:0 }}/>
+          <b style={{ fontWeight:700, fontSize:15, letterSpacing:"-0.5px" }}>{num}</b>
+          <span style={{ opacity:.75 }}>{label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Summary Sidebar ─────────────────────────────────────────────────────── */
 function SummaryCard({ items }) {
   const pending  = countByStatus(items, "pending");
   const accepted = countByStatus(items, "accepted");
   const rejected = countByStatus(items, "rejected");
   const total    = items.length || 1;
+  const rows = [
+    { label:"Pending",  val:pending,  dot:C.pend, pct:(pending/total)*100  },
+    { label:"Accepted", val:accepted, dot:C.acpt, pct:(accepted/total)*100 },
+    { label:"Rejected", val:rejected, dot:C.rjct, pct:(rejected/total)*100 },
+  ];
   return (
-    <div style={s.infoCard}>
-      <div style={s.infoHead}>
-        <div style={{ fontSize:20 }}>🔔</div>
-        <span style={s.infoTitle}>Notification Overview</span>
+    <div style={S.sideCard}>
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+        <div style={{ width:32, height:32, borderRadius:9, background:C.accentLt, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <Icon.Activity width={16} height={16} style={{ color:C.accent }}/>
+        </div>
+        <span style={{ fontFamily:F.body, fontSize:13.5, fontWeight:700, color:C.ink }}>Overview</span>
       </div>
-      <p style={{ fontFamily:FONT, fontSize:11.5, color:"#94a3b8", margin:"0 0 14px", fontWeight:500 }}>
-        {items.length} total notification{items.length !== 1 ? "s" : ""}
+      <p style={{ fontFamily:F.body, fontSize:11, color:C.ink3, marginBottom:14, fontWeight:500 }}>
+        {items.length} notification{items.length !== 1 ? "s" : ""} total
       </p>
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-        {[
-          { label:"Pending",  val:pending,  dot:"#f59e0b" },
-          { label:"Accepted", val:accepted, dot:"#16a34a" },
-          { label:"Rejected", val:rejected, dot:"#e11d48" },
-        ].map(row => (
-          <div key={row.label} style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, color:"#475569", fontFamily:FONT, fontWeight:500 }}>
-              <span style={{ width:10, height:10, borderRadius:"50%", background:row.dot, flexShrink:0 }} />
-              {row.label}
+        {rows.map(row => (
+          <div key={row.label}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:7, fontFamily:F.body, fontSize:12, color:C.inkLight, fontWeight:500 }}>
+                <span style={{ width:8, height:8, borderRadius:"50%", background:row.dot }}/>
+                {row.label}
+              </div>
+              <span style={{ fontFamily:F.body, fontSize:13, fontWeight:700, color:C.ink }}>{row.val}</span>
             </div>
-            <span style={{ fontFamily:FONT, fontSize:16, fontWeight:800, color:"#0f172a" }}>{row.val}</span>
+            <div style={{ height:4, background:C.lineSoft, borderRadius:99, overflow:"hidden" }}>
+              <div style={{
+                height:"100%", borderRadius:99, background:row.dot,
+                width:`${Math.min(100, row.pct)}%`,
+                transition:"width .8s cubic-bezier(.22,1,.36,1)",
+              }}/>
+            </div>
           </div>
         ))}
-      </div>
-      <div style={{ height:6, background:"#e0ecfb", borderRadius:99, overflow:"hidden", marginTop:14 }}>
-        <div style={{
-          height:"100%", borderRadius:99,
-          background:"linear-gradient(90deg, #f59e0b, #16a34a, #e11d48)",
-          width:`${Math.min(100, ((pending + accepted) / total) * 100)}%`,
-          transition:"width 0.8s cubic-bezier(.22,1,.36,1)",
-        }} />
       </div>
     </div>
   );
 }
 
-/* ─── Notification Card ──────────────────────────────────────── */
+/* ─── Tips Card ───────────────────────────────────────────────────────────── */
+function TipsCard() {
+  const tips = [
+    "Click any notification to view buyer details and update its status.",
+    "Use Accept to confirm interest and initiate a deal with the buyer.",
+    "Rejected requests are hidden from buyers but stay in your records.",
+  ];
+  return (
+    <div style={S.sideCard}>
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+        <div style={{ width:32, height:32, borderRadius:9, background:C.accentLt, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <Icon.Info width={16} height={16} style={{ color:C.accent }}/>
+        </div>
+        <span style={{ fontFamily:F.body, fontSize:13.5, fontWeight:700, color:C.ink }}>Quick Tips</span>
+      </div>
+      <div style={{ display:"flex", flexDirection:"column", gap:9 }}>
+        {tips.map((t, i) => (
+          <div key={i} style={{ display:"flex", gap:9, alignItems:"flex-start" }}>
+            <div style={{
+              width:18, height:18, borderRadius:5, background:C.accentLt,
+              display:"flex", alignItems:"center", justifyContent:"center",
+              flexShrink:0, marginTop:1,
+            }}>
+              <span style={{ fontSize:9, fontWeight:800, color:C.accent, fontFamily:F.mono }}>
+                {String(i+1).padStart(2,"0")}
+              </span>
+            </div>
+            <p style={{ fontFamily:F.body, fontSize:12, color:C.inkLight, lineHeight:1.55, margin:0 }}>{t}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Empty State ─────────────────────────────────────────────────────────── */
+function EmptyState({ filter }) {
+  return (
+    <div style={{ textAlign:"center", padding:"80px 24px", animation:"fadeUp .4s ease both" }}>
+      <div style={{
+        width:64, height:64, borderRadius:20, background:C.accentLt,
+        display:"flex", alignItems:"center", justifyContent:"center",
+        margin:"0 auto 20px",
+      }}>
+        <Icon.Inbox width={30} height={30} style={{ color:C.accent }}/>
+      </div>
+      <h3 style={{ fontFamily:F.display, fontSize:22, fontWeight:700, color:C.ink, marginBottom:8 }}>
+        No {filter !== "all" ? filter : ""} notifications
+      </h3>
+      <p style={{ fontFamily:F.body, fontSize:13, color:C.ink3, lineHeight:1.6, maxWidth:280, margin:"0 auto" }}>
+        You're all caught up — nothing here right now.
+      </p>
+    </div>
+  );
+}
+
+/* ─── Notification Card ───────────────────────────────────────────────────── */
 const NotificationCard = React.memo(function NotificationCard({ n, i, isFlashing, onOpen }) {
   const st        = getStatus(n?.status);
   const buyerName = getBuyerName(n);
   const price     = formatPrice(n?.product_price);
-
-  const barColors = {
-    pending:  "linear-gradient(180deg,#fbbf24,#f59e0b)",
-    accepted: "linear-gradient(180deg,#4ade80,#16a34a)",
-    rejected: "linear-gradient(180deg,#fb7185,#e11d48)",
-  };
   const statusKey = (n?.status || "pending").toLowerCase();
 
   return (
     <div
-      className={`mn-card${isFlashing ? " flash" : ""}`}
+      className={`mn-card${isFlashing ? " mn-flash" : ""}`}
       style={{
-        animationDelay:`${i * 0.045}s`,
-        background: n.is_read ? "#fff" : "#f7fbff",
-        border:`1.5px solid ${n.is_read ? "#e0ecfb" : "rgba(21,101,192,0.22)"}`,
-        borderRadius:22,
-        boxShadow:"0 4px 32px rgba(21,101,192,0.06), 0 1px 4px rgba(0,0,0,0.03)",
+        animationDelay:`${i * 0.04}s`,
+        background: n.is_read ? C.white : "#f7f9ff",
+        border:`1px solid ${n.is_read ? C.line : C.accentMid}`,
+        borderRadius:16,
+        boxShadow:`0 2px 16px rgba(61,90,254,0.05)`,
         display:"grid",
-        gridTemplateColumns:"6px 88px 1fr auto",
+        gridTemplateColumns:"4px 80px 1fr auto",
         alignItems:"stretch",
         overflow:"hidden",
-        minHeight:110,
-        position:"relative",
+        minHeight:100,
       }}
       onClick={() => onOpen(n)}
     >
-      {/* Left accent bar */}
-      <div style={{ width:6, background: barColors[statusKey] || barColors.pending, borderRadius:"6px 0 0 6px", flexShrink:0 }} />
+      {/* Accent bar */}
+      <div style={{ width:4, background:st.bar, flexShrink:0 }}/>
 
       {/* Thumbnail */}
-      <div style={{ position:"relative", overflow:"hidden", background:BLUELT }}>
-        <ProductThumb src={n.product_image} alt={str(n.product_title) ?? "Product"} size="100%" fullHeight />
+      <div style={{ position:"relative", overflow:"hidden", background:C.accentLt, flexShrink:0 }}>
+        <Thumb src={n.product_image} alt={str(n.product_title) ?? "Product"} size="100%" fullHeight/>
         {n.product_city && (
-          <span style={{
-            position:"absolute", bottom:7, left:7,
-            background:"rgba(15,52,96,0.75)", backdropFilter:"blur(6px)",
-            color:"#fff", fontSize:9, fontWeight:700, letterSpacing:".08em",
-            textTransform:"uppercase", borderRadius:6, padding:"3px 8px",
-            fontFamily:FONT,
+          <div style={{
+            position:"absolute", bottom:6, left:6,
+            background:"rgba(11,15,26,0.72)", backdropFilter:"blur(6px)",
+            borderRadius:5, padding:"2px 6px",
+            display:"flex", alignItems:"center", gap:3,
           }}>
-            📍 {n.product_city}
-          </span>
+            <Icon.MapPin width={8} height={8} style={{ color:"rgba(255,255,255,0.7)", flexShrink:0 }}/>
+            <span style={{ fontSize:8.5, fontWeight:600, color:"rgba(255,255,255,0.9)", fontFamily:F.body, letterSpacing:".04em" }}>
+              {n.product_city}
+            </span>
+          </div>
         )}
         {!n.is_read && (
           <span style={{
-            position:"absolute", top:8, right:8,
-            width:10, height:10, borderRadius:"50%",
-            background:BLUE, border:"2px solid #fff",
-            animation:"dotPulse 1.4s ease infinite",
-          }} />
+            position:"absolute", top:7, right:7,
+            width:8, height:8, borderRadius:"50%",
+            background:C.accent, border:"2px solid #fff",
+          }}/>
         )}
       </div>
 
       {/* Body */}
-      <div style={{
-        padding:"14px 16px 12px",
-        display:"flex", flexDirection:"column", justifyContent:"space-between", gap:8, minWidth:0,
-      }}>
+      <div style={{ padding:"12px 14px", display:"flex", flexDirection:"column", justifyContent:"space-between", gap:6, minWidth:0 }}>
         <div>
           <h3 style={{
-            fontFamily:FONT, fontSize:"clamp(14px,2.2vw,15px)",
-            fontWeight:700, color:"#0f172a", letterSpacing:"-0.02em",
-            whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
-            margin:"0 0 6px",
+            fontFamily:F.body, fontSize:13.5, fontWeight:700, color:C.ink,
+            letterSpacing:"-0.02em", whiteSpace:"nowrap", overflow:"hidden",
+            textOverflow:"ellipsis", marginBottom:6,
           }} title={str(n.product_title) ?? "Untitled Product"}>
             {str(n.product_title) ?? "Untitled Product"}
           </h3>
-
-          <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:8 }}>
-            <AvatarCircle
-              name={buyerName}
-              initials={getInitials(buyerName)}
-              image={n.buyer_profile_image}
-              size={22}
-            />
-            <span style={{ fontSize:12.5, color:"#475569", fontWeight:500, fontFamily:FONT }}>{buyerName}</span>
-            <span style={{ fontSize:11.5, color:"#94a3b8", fontFamily:FONT }}>is interested</span>
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:6 }}>
+            <Avatar name={buyerName} initials={getInitials(buyerName)} image={n.buyer_profile_image} size={20}/>
+            <span style={{ fontSize:11.5, color:C.inkLight, fontFamily:F.body, fontWeight:500 }}>{buyerName}</span>
+            <span style={{ fontSize:11, color:C.ink3, fontFamily:F.body }}>· interested</span>
           </div>
-
-          <div style={{ display:"flex", flexWrap:"wrap", alignItems:"center", gap:6 }}>
-            {price && (
-              <span style={{
-                fontSize:13, fontWeight:800, color:BLUE,
-                letterSpacing:"-0.02em", fontFamily:FONT,
-              }}>{price}</span>
-            )}
-          </div>
+          {price && (
+            <span style={{ fontSize:12.5, fontWeight:800, color:C.accent, fontFamily:F.body, letterSpacing:"-0.02em" }}>{price}</span>
+          )}
         </div>
-        <StatusBadge status={statusKey} />
+        <StatusBadge status={statusKey}/>
       </div>
 
-      {/* Actions column */}
+      {/* Meta */}
       <div style={{
-        display:"flex", flexDirection:"column",
-        alignItems:"flex-end", justifyContent:"space-between",
-        padding:"14px 16px", gap:10,
-        borderLeft:"1px solid #e0ecfb", minWidth:80,
+        display:"flex", flexDirection:"column", alignItems:"flex-end", justifyContent:"space-between",
+        padding:"12px 14px", borderLeft:`1px solid ${C.lineSoft}`, minWidth:72, flexShrink:0,
       }}>
-        <span style={{ fontSize:10.5, color:"#94a3b8", fontFamily:FONT, fontWeight:500, whiteSpace:"nowrap" }}>
+        <span style={{ fontSize:10, color:C.ink3, fontFamily:F.body, fontWeight:500, whiteSpace:"nowrap" }}>
           {timeAgo(n.created_at)}
         </span>
         {!n.is_read && (
           <span style={{
-            fontSize:9, fontWeight:700, color:BLUE,
-            background:BLUELT, border:`1px solid rgba(21,101,192,0.25)`,
-            borderRadius:40, padding:"2px 8px", fontFamily:FONT, letterSpacing:".06em", textTransform:"uppercase",
-          }}>
-            New
-          </span>
+            fontSize:9, fontWeight:700, color:C.accent,
+            background:C.accentLt, borderRadius:5,
+            padding:"2px 7px", fontFamily:F.body, letterSpacing:".07em", textTransform:"uppercase",
+          }}>New</span>
         )}
       </div>
     </div>
   );
 });
 
-/* ─── Empty State ────────────────────────────────────────────── */
-function EmptyState({ filter }) {
-  return (
-    <div style={{ textAlign:"center", padding:"clamp(48px,8vw,88px) 24px", animation:"fadeUp 0.45s ease both" }}>
-      <div style={{ fontSize:64, display:"block", marginBottom:20, animation:"floatOrb 4s ease-in-out infinite" }}>
-        🔔
-      </div>
-      <h3 style={{ fontFamily:FONT_D, fontSize:"clamp(18px,4vw,24px)", fontWeight:700, color:"#0f172a", marginBottom:10, letterSpacing:"-0.03em" }}>
-        No {filter !== "all" ? filter : ""} notifications
-      </h3>
-      <p style={{ color:"#94a3b8", fontSize:14, lineHeight:1.6, fontFamily:FONT }}>
-        You're all caught up — nothing to show here.
-      </p>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════════
    MAIN COMPONENT
-════════════════════════════════════════════════════════════════ */
+════════════════════════════════════════════════════════════════════════════ */
 export default function MarketplaceNotifications() {
   const [items,   setItems]   = useState([]);
   const [total,   setTotal]   = useState(0);
@@ -405,7 +600,7 @@ export default function MarketplaceNotifications() {
 
   useEffect(() => { loadNotifications(); }, []);
 
-  const loadNotifications = async () => {
+  const loadNotifications = useCallback(async () => {
     try {
       const res = await fetchNotifications();
       const p   = res?.data ?? res;
@@ -414,13 +609,13 @@ export default function MarketplaceNotifications() {
       setTotal(p?.total ?? p?.count ?? arr.length);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  };
+  }, []);
 
   const handleMarkAll = useCallback(async () => {
     try {
       await markAllNotificationsRead();
-      setItems(prev => prev.map(n => ({ ...n, is_read: true })));
-    } catch (e) { console.error(e); }
+      setItems(prev => prev.map(n => ({ ...n, is_read:true })));
+    } catch(e) { console.error(e); }
   }, []);
 
   const handleRead = useCallback(async (id) => {
@@ -429,14 +624,14 @@ export default function MarketplaceNotifications() {
     try {
       await markNotificationRead(id);
       setFlashId(id);
-      setTimeout(() => setFlashId(null), 500);
-      setItems(prev => prev.map(x => x.id === id ? { ...x, is_read: true } : x));
-    } catch (e) { console.error(e); }
+      setTimeout(() => setFlashId(null), 600);
+      setItems(prev => prev.map(x => x.id === id ? { ...x, is_read:true } : x));
+    } catch(e) { console.error(e); }
   }, []);
 
   const handleStatusUpdate = useCallback((id, newStatus) => {
-    setItems(prev => prev.map(x => x.id === id ? { ...x, status: newStatus } : x));
-    setModal(prev => prev?.id === id ? { ...prev, status: newStatus } : prev);
+    setItems(prev => prev.map(x => x.id === id ? { ...x, status:newStatus } : x));
+    setModal(prev => prev?.id === id ? { ...prev, status:newStatus } : prev);
   }, []);
 
   const openModal  = useCallback((n) => { setModal(n); handleRead(n.id); }, [handleRead]);
@@ -453,8 +648,8 @@ export default function MarketplaceNotifications() {
     () => filter === "all" ? safe : safe.filter(n => n?.status === filter),
     [safe, filter]
   );
-  const unread   = useMemo(() => safe.filter(n => !n?.is_read).length, [safe]);
-  const countOf  = useCallback(
+  const unread  = useMemo(() => safe.filter(n => !n?.is_read).length, [safe]);
+  const countOf = useCallback(
     (f) => f === "all" ? safe.length : safe.filter(n => n?.status === f).length,
     [safe]
   );
@@ -465,165 +660,174 @@ export default function MarketplaceNotifications() {
 
   return (
     <MarketplaceLayout>
-      <InjectStyles />
+      <InjectStyles/>
 
-      <div style={s.page}>
+      <div style={{ minHeight:"100vh", background:C.bg, fontFamily:F.body }}>
 
         {/* ── HERO ── */}
-        <div style={s.hero}>
-          <div style={s.heroDots} />
-          <div style={{ ...s.orb, width:260, height:260, top:-90,  right:-70,  animationDelay:"0s" }} />
-          <div style={{ ...s.orb, width:140, height:140, bottom:20, left:50,   animationDelay:"2s" }} />
-          <div style={{ ...s.orb, width:90,  height:90,  top:30,   left:"35%", animationDelay:"4s" }} />
+        <div style={{
+          position:"relative",
+          background:`linear-gradient(135deg, ${C.accentDk} 30%, ${C.accent} 70%, #3147c7 90%)`,
+          overflow:"hidden",
+        }}>
+          {/* Subtle grid texture */}
+          <div style={{
+            position:"absolute", inset:0, pointerEvents:"none",
+            backgroundImage:"linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)",
+            backgroundSize:"40px 40px",
+          }}/>
+          {/* Glow orbs */}
+          <div style={{ position:"absolute", width:400, height:400, borderRadius:"50%", background:"rgba(255,255,255,0.05)", top:-150, right:-100, pointerEvents:"none" }}/>
+          <div style={{ position:"absolute", width:200, height:200, borderRadius:"50%", background:"rgba(255,255,255,0.04)", bottom:-60, left:80, pointerEvents:"none" }}/>
 
-          <svg style={s.heroWave} viewBox="0 0 1440 60" preserveAspectRatio="none">
-            <path
-              style={{ animation:"waveSlide 10s linear infinite" }}
-              d="M0,30 C240,55 480,5 720,30 C960,55 1200,5 1440,30 C1680,55 1920,5 2160,30 L2160,60 L0,60 Z"
-              fill="#f0f6ff"
-            />
-            <path
-              style={{ animation:"waveSlide 15s linear infinite reverse" }}
-              d="M0,42 C300,18 600,56 900,38 C1200,20 1500,52 1800,36 C2000,24 2160,46 2160,40 L2160,60 L0,60 Z"
-              fill="#e3f2fd"
-              opacity="0.7"
-            />
-          </svg>
-
-          <div style={s.heroInner}>
-            <div style={s.heroLabel}>
-              <span style={{ width:6, height:6, borderRadius:"50%", background:"#34d399", animation:"pulse 1.8s infinite", flexShrink:0 }} />
-              My Dashboard
+          <div style={{ position:"relative", zIndex:1, maxWidth:1080, margin:"0 auto", padding:"40px 28px 80px" }}>
+            {/* Eyebrow label */}
+            <div style={{
+              display:"inline-flex", alignItems:"center", gap:7,
+              background:"rgba(255,255,255,0.12)", backdropFilter:"blur(10px)",
+              border:"1px solid rgba(255,255,255,0.22)", borderRadius:7,
+              padding:"5px 13px", marginBottom:14,
+              fontFamily:F.body, fontSize:11, fontWeight:700,
+              color:"rgba(255,255,255,0.85)", letterSpacing:".06em", textTransform:"uppercase",
+              animation:"fadeIn .4s ease both",
+            }}>
+              <span style={{ width:6, height:6, borderRadius:"50%", background:"#6ee7b7", animation:"pulse 2s infinite" }}/>
+              Notifications Dashboard
             </div>
 
-            <h1 style={s.heroTitle}>
-              My{" "}
-              <span style={{
-                background:"linear-gradient(90deg, #93c5fd, #34d399)",
-                WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text",
-              }}>
-                Notifications
-              </span>
+            <h1 style={{
+              fontFamily:F.display,
+              fontSize:"clamp(28px,4.5vw,46px)",
+              fontWeight:700, color:"#fff",
+              letterSpacing:"-0.5px", lineHeight:1.12,
+              marginBottom:10,
+              animation:"fadeUp .4s ease .08s both",
+            }}>
+              Buyer Requests &amp;{" "}
+              <span style={{ fontStyle:"italic", color:"rgba(255,255,255,0.72)" }}>Notifications</span>
             </h1>
 
-            <p style={s.heroSub}>
+            <p style={{
+              fontFamily:F.body, fontSize:13.5,
+              color:"rgba(255,255,255,0.65)", fontWeight:400,
+              animation:"fadeUp .4s ease .16s both", maxWidth:480,
+            }}>
               Stay on top of every buyer interest — review, respond, and manage requests in real time.
             </p>
 
             {!loading && safe.length > 0 && (
-              <div style={s.statRow}>
-                {[
-                  { dot:"#f59e0b", num:pending,     label:"Pending"  },
-                  { dot:"#16a34a", num:accepted,    label:"Accepted" },
-                  { dot:"#e11d48", num:rejected,    label:"Rejected" },
-                  { dot:"#93c5fd", num:safe.length, label:"Total"    },
-                  { dot:"#a78bfa", num:unread,      label:"Unread"   },
-                ].map(({ dot, num, label }) => (
-                  <div key={label} className="mn-stat-pill" style={s.statPill}>
-                    <span style={{ width:9, height:9, borderRadius:"50%", background:dot, flexShrink:0 }} />
-                    <span style={{ fontSize:16, fontWeight:800 }}>{num}</span>
-                    <span style={{ fontWeight:600 }}>{label}</span>
-                  </div>
-                ))}
-              </div>
+              <StatPills pending={pending} accepted={accepted} rejected={rejected} total={safe.length} unread={unread}/>
             )}
           </div>
+
+          {/* Wave separator */}
+          <svg style={{ position:"absolute", bottom:0, left:0, width:"100%", pointerEvents:"none" }} viewBox="0 0 1440 48" preserveAspectRatio="none">
+            <path d="M0,24 C360,48 720,0 1080,24 C1260,36 1380,18 1440,24 L1440,48 L0,48 Z" fill={C.bg}/>
+          </svg>
         </div>
 
         {/* ── BODY ── */}
-        <div style={s.body}>
-          <div style={{ marginBottom:24 }}>
-            <AdSlot variant="leaderboard" />
+        <div style={{ maxWidth:1080, margin:"0 auto", padding:"clamp(16px,3vw,28px) clamp(12px,3vw,24px)" }}>
+          {/* Leaderboard ad */}
+          <div style={{ marginBottom:20 }}>
+            <AdSlot variant="leaderboard"/>
           </div>
 
-          <div className="mn-layout" style={s.layout}>
+          <div className="mn-layout" style={{ display:"grid", gridTemplateColumns:"1fr 268px", gap:20, alignItems:"start" }}>
 
-            {/* ── Main list column ── */}
-            <div style={{ flex:1, minWidth:0 }}>
-              <div className="mn-sidebar-mobile" style={{ display:"none", marginBottom:16 }}>
-                <AdSlot variant="rectangle" />
-              </div>
-
-              {/* ── Sticky filter bar ── */}
-              <div style={s.filterBar}>
+            {/* ── Main list ── */}
+            <div style={{ minWidth:0 }}>
+              {/* Filter bar */}
+              <div style={{
+                background:C.white, borderRadius:16,
+                border:`1px solid ${C.line}`,
+                boxShadow:"0 2px 20px rgba(61,90,254,0.06)",
+                overflow:"hidden",
+                position:"sticky", top:10, zIndex:50,
+                animation:"fadeUp .35s ease both",
+                marginBottom:14,
+              }}>
+                {/* Header */}
                 <div className="mn-header-row" style={{
                   display:"flex", alignItems:"center", justifyContent:"space-between",
-                  gap:12, flexWrap:"wrap", padding:"16px 20px 12px",
-                  borderBottom:`1px solid #e0ecfb`,
+                  gap:10, padding:"14px 18px", borderBottom:`1px solid ${C.lineSoft}`,
+                  flexWrap:"wrap",
                 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                     <div style={{
-                      width:40, height:40, borderRadius:13, flexShrink:0,
-                      background:`linear-gradient(135deg, #0f3460, ${BLUE})`,
+                      width:36, height:36, borderRadius:10, flexShrink:0,
+                      background:`linear-gradient(135deg,${C.accentDk},${C.accent})`,
                       display:"flex", alignItems:"center", justifyContent:"center",
-                      boxShadow:`0 4px 14px rgba(21,101,192,.28)`,
                     }}>
-                      <BellIcon />
+                      <Icon.Bell width={17} height={17} style={{ color:"#fff" }}/>
                     </div>
                     <div>
-                      <h2 style={{ fontFamily:FONT, fontSize:16, fontWeight:800, color:"#0f172a", margin:0, letterSpacing:"-0.03em" }}>
+                      <h2 style={{ fontFamily:F.body, fontSize:15, fontWeight:700, color:C.ink, letterSpacing:"-0.03em", marginBottom:1 }}>
                         Inbox
                       </h2>
-                      <p style={{ fontSize:11.5, color:"#94a3b8", margin:"2px 0 0", fontFamily:FONT }}>
-                        {total} total · {unread} unread
+                      <p style={{ fontFamily:F.body, fontSize:11, color:C.ink3, fontWeight:500 }}>
+                        {total} total &middot; {unread} unread
                       </p>
                     </div>
                   </div>
 
-                  <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:7, flexWrap:"wrap" }}>
                     {unread > 0 && (
-                      <div style={{
-                        display:"flex", alignItems:"center", gap:6,
-                        background:BLUELT, color:BLUE,
-                        fontSize:11.5, fontWeight:700, padding:"5px 12px",
-                        borderRadius:20, border:`1px solid rgba(21,101,192,0.25)`,
-                        fontFamily:FONT,
+                      <span style={{
+                        display:"inline-flex", alignItems:"center", gap:5,
+                        background:C.accentLt, color:C.accent,
+                        fontSize:11, fontWeight:700, padding:"4px 10px",
+                        borderRadius:6, border:`1px solid ${C.accentMid}`,
+                        fontFamily:F.body,
                       }}>
-                        <span style={{ width:7, height:7, borderRadius:"50%", background:BLUE, display:"block", animation:"dotPulse 1.4s ease infinite" }} />
+                        <span style={{ width:6, height:6, borderRadius:"50%", background:C.accent, animation:"pulse 1.6s infinite" }}/>
                         {unread} new
-                      </div>
+                      </span>
                     )}
-                    <button className="mn-mark-all" onClick={handleMarkAll} style={{
-                      fontSize:12.5, color:BLUE, background:BLUELT,
-                      border:`1px solid rgba(21,101,192,0.25)`,
-                      padding:"7px 16px", borderRadius:20, cursor:"pointer",
-                      fontWeight:700, fontFamily:FONT,
+                    <button className="mn-btn-mark" onClick={handleMarkAll} style={{
+                      fontFamily:F.body, fontSize:12, fontWeight:600, color:C.inkLight,
+                      background:C.lineSoft, border:`1px solid ${C.line}`,
+                      padding:"6px 14px", borderRadius:8, cursor:"pointer",
                       display:"flex", alignItems:"center", gap:5, whiteSpace:"nowrap",
                     }}>
-                      <CheckIcon /> Mark all read
+                      <Icon.Check width={12} height={12}/>
+                      Mark all read
                     </button>
                   </div>
                 </div>
 
-                <div style={{ display:"flex", gap:6, padding:"10px 20px", flexWrap:"wrap" }}>
+                {/* Tabs */}
+                <div style={{ display:"flex", gap:5, padding:"8px 16px", flexWrap:"wrap" }}>
                   {FILTERS.map(f => {
                     const active = filter === f;
+                    const dotColor = STATUS[f]?.dot;
                     return (
-                      <button key={f}
-                        className={`mn-tab${active ? " mn-tab-active" : ""}`}
+                      <button
+                        key={f}
+                        className={`mn-tab${active ? " mn-tab-on" : ""}`}
                         onClick={() => setFilter(f)}
                         style={{
-                          fontSize:12, fontWeight: active ? 700 : 500,
-                          padding:"5px 14px", borderRadius:40,
-                          border:`1.5px solid ${active ? BLUE : "#dde8ff"}`,
-                          background: active ? BLUE : "#fff",
-                          color: active ? "#fff" : "#64748b",
-                          fontFamily:FONT,
-                          display:"flex", alignItems:"center", gap:6, whiteSpace:"nowrap",
+                          fontFamily:F.body, fontSize:11.5, fontWeight: active ? 700 : 500,
+                          padding:"4px 12px", borderRadius:7,
+                          border:`1px solid ${active ? C.accent : C.line}`,
+                          background: active ? C.accent : C.white,
+                          color: active ? "#fff" : C.inkLight,
+                          display:"flex", alignItems:"center", gap:5, whiteSpace:"nowrap",
                         }}
                       >
-                        {STATUS_MAP[f] && (
+                        {dotColor && (
                           <span style={{
                             width:6, height:6, borderRadius:"50%", flexShrink:0,
-                            background: active ? "rgba(255,255,255,0.7)" : STATUS_MAP[f].dot,
-                          }} />
+                            background: active ? "rgba(255,255,255,0.6)" : dotColor,
+                          }}/>
                         )}
                         {f.charAt(0).toUpperCase() + f.slice(1)}
                         <span style={{
-                          fontSize:10, fontWeight:700, padding:"1px 6px",
-                          borderRadius:10, minWidth:20, textAlign:"center",
-                          background: active ? "rgba(255,255,255,0.22)" : BLUELT,
-                          color: active ? "#fff" : BLUE,
+                          fontSize:10, fontWeight:700, padding:"1px 5px",
+                          borderRadius:4, minWidth:18, textAlign:"center",
+                          background: active ? "rgba(255,255,255,0.2)" : C.accentLt,
+                          color: active ? "#fff" : C.accent,
+                          fontFamily:F.mono,
                         }}>{countOf(f)}</span>
                       </button>
                     );
@@ -632,16 +836,15 @@ export default function MarketplaceNotifications() {
               </div>
 
               {/* Card list */}
-              <div style={{ display:"flex", flexDirection:"column", gap:14, marginTop:16 }}>
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
                 {loading
-                  ? <SkeletonList />
+                  ? [0,1,2,3].map(i => <SkeletonCard key={i} delay={i * 100}/>)
                   : filtered.length === 0
-                    ? <EmptyState filter={filter} />
+                    ? <EmptyState filter={filter}/>
                     : filtered.map((n, i) => (
                         <NotificationCard
                           key={n.id}
-                          n={n}
-                          i={i}
+                          n={n} i={i}
                           isFlashing={flashId === n.id}
                           onOpen={openModal}
                         />
@@ -650,38 +853,23 @@ export default function MarketplaceNotifications() {
               </div>
 
               {!loading && filtered.length > 0 && (
-                <p style={{ fontSize:12, color:"#94a3b8", textAlign:"center", padding:"16px 0 4px", fontFamily:FONT }}>
+                <p style={{ fontFamily:F.body, fontSize:11, color:C.ink3, textAlign:"center", padding:"14px 0 4px", fontWeight:500 }}>
                   Showing {filtered.length} of {total} notification{total !== 1 ? "s" : ""}
                 </p>
               )}
             </div>
 
             {/* ── Sidebar ── */}
-            <aside className="mn-sidebar" style={s.sidebar}>
-              {!loading && safe.length > 0 && <SummaryCard items={safe} />}
-
-              <div style={s.infoCard}>
-                <div style={s.infoHead}>
-                  <div style={{ fontSize:20 }}>💡</div>
-                  <span style={s.infoTitle}>Managing Requests</span>
-                </div>
-                <ul style={{ listStyle:"none", padding:0, margin:0, display:"flex", flexDirection:"column", gap:10 }}>
-                  {[
-                    "Click any notification to view full buyer details and update its status.",
-                    "Use Accept to confirm interest and initiate a deal with the buyer.",
-                    "Rejected requests are hidden from buyers but remain in your records.",
-                  ].map((tip, i) => (
-                    <li key={i} style={{ display:"flex", alignItems:"flex-start", gap:8, fontSize:12.5, color:"#475569", fontFamily:FONT, lineHeight:1.55 }}>
-                      <span style={{ width:7, height:7, borderRadius:"50%", background:BLUE, marginTop:5, flexShrink:0, opacity:0.7 }} />
-                      {tip}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <AdSlot variant="rectangle" />
-              <div style={{ marginTop:16 }}>
-                <AdSlot variant="rectangle" />
+            <aside className="mn-sidebar" style={{
+              display:"flex", flexDirection:"column", gap:14,
+              position:"sticky", top:70,
+              animation:"fadeUp .4s ease .18s both",
+            }}>
+              {!loading && safe.length > 0 && <SummaryCard items={safe}/>}
+              <TipsCard/>
+              <AdSlot variant="rectangle"/>
+              <div style={{ marginTop:4 }}>
+                <AdSlot variant="rectangle"/>
               </div>
             </aside>
           </div>
@@ -689,15 +877,15 @@ export default function MarketplaceNotifications() {
       </div>
 
       {modal && (
-        <DetailModal n={modal} onClose={closeModal} onStatusUpdate={handleStatusUpdate} />
+        <DetailModal n={modal} onClose={closeModal} onStatusUpdate={handleStatusUpdate}/>
       )}
     </MarketplaceLayout>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════════
    DETAIL MODAL
-════════════════════════════════════════════════════════════════ */
+════════════════════════════════════════════════════════════════════════════ */
 function DetailModal({ n, onClose, onStatusUpdate }) {
   const buyerName = getBuyerName(n);
   const initials  = getInitials(buyerName);
@@ -718,7 +906,7 @@ function DetailModal({ n, onClose, onStatusUpdate }) {
       onStatusUpdate(n.id, val);
       setSaved(true);
       setTimeout(() => setSaved(false), 2200);
-    } catch (e) {
+    } catch(e) {
       console.error(e);
       setStatus(prev);
     } finally {
@@ -727,108 +915,104 @@ function DetailModal({ n, onClose, onStatusUpdate }) {
   }, [status, saving, n.id, onStatusUpdate]);
 
   return (
-    <div onClick={onClose} style={{
-      position:"fixed", inset:0, zIndex:200,
-      background:"rgba(15,52,96,0.58)", backdropFilter:"blur(6px)",
-      display:"flex", alignItems:"center", justifyContent:"center",
-      padding:12, animation:"backdropIn 0.18s ease",
-    }}>
+    <div
+      onClick={onClose}
+      style={{
+        position:"fixed", inset:0, zIndex:200,
+        background:"rgba(11,15,26,0.6)", backdropFilter:"blur(8px)",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        padding:12, animation:"bdIn .18s ease",
+      }}
+    >
       <div
-        className="mn-modal-box"
+        className="mn-modal-wrap"
         onClick={e => e.stopPropagation()}
         style={{
-          background:"#fff", borderRadius:24, width:"100%", maxWidth:520,
+          background:C.white, borderRadius:20, width:"100%", maxWidth:500,
           maxHeight:"88vh", overflow:"hidden",
-          boxShadow:"0 32px 72px rgba(15,52,96,.20), 0 6px 24px rgba(15,52,96,.08)",
-          animation:"modalIn 0.24s cubic-bezier(0.22,1,0.36,1)",
+          boxShadow:"0 40px 80px rgba(11,15,26,.22), 0 8px 24px rgba(11,15,26,.08)",
+          animation:"slideIn .22s cubic-bezier(.22,1,.36,1)",
           display:"flex", flexDirection:"column",
-          border:"1.5px solid #e0ecfb",
-          willChange:"transform, opacity",
+          border:`1px solid ${C.line}`,
         }}
       >
-        {/* ── MODAL HEADER ── */}
+        {/* Modal Header */}
         <div style={{
-          background:"linear-gradient(130deg, #0f3460 0%, #1565c0 55%, #1976d2 100%)",
-          padding:"20px 20px 16px", flexShrink:0, position:"relative",
-          overflow:"hidden",
+          background:`linear-gradient(135deg, ${C.accentDk} 0%, ${C.accent} 100%)`,
+          padding:"20px 20px 0", flexShrink:0, position:"relative", overflow:"hidden",
         }}>
-          {/* Dot grid */}
+          {/* Grid texture */}
           <div style={{
             position:"absolute", inset:0, pointerEvents:"none",
-            backgroundImage:"radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px)",
-            backgroundSize:"20px 20px",
-          }} />
+            backgroundImage:"linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)",
+            backgroundSize:"24px 24px",
+          }}/>
 
-          {/* Close button */}
+          {/* Close */}
           <button className="mn-modal-close" onClick={onClose} style={{
-            position:"absolute", top:14, right:14,
-            width:32, height:32, borderRadius:"50%",
-            background:"rgba(255,255,255,0.12)", border:"none",
-            color:"#fff", fontSize:20, cursor:"pointer",
-            display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1,
-            zIndex:1,
-          }}>×</button>
+            position:"absolute", top:12, right:12, zIndex:1,
+            width:30, height:30, borderRadius:"50%",
+            background:"rgba(255,255,255,0.12)",
+            color:"#fff", fontSize:0,
+            display:"flex", alignItems:"center", justifyContent:"center",
+          }}>
+            <Icon.X width={14} height={14} style={{ color:"#fff" }}/>
+          </button>
 
           {/* Product row */}
-          <div style={{
-            display:"flex", alignItems:"center", gap:14,
-            marginBottom:14, paddingRight:44, position:"relative", zIndex:1,
-          }}>
-            <div style={{
-              width:60, height:60, borderRadius:14, flexShrink:0,
-              overflow:"hidden", border:"1.5px solid rgba(255,255,255,0.2)",
-              background:"rgba(255,255,255,0.1)",
-            }}>
-              <ProductThumb src={n.product_image} alt={str(n.product_title) ?? "Product"} size={60} fullHeight />
+          <div style={{ position:"relative", zIndex:1, display:"flex", gap:14, alignItems:"center", paddingRight:40, marginBottom:16 }}>
+            <div style={{ width:56, height:56, borderRadius:12, overflow:"hidden", flexShrink:0, border:"1.5px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.1)" }}>
+              <Thumb src={n.product_image} alt={str(n.product_title) ?? "Product"} size={56} fullHeight/>
             </div>
             <div style={{ minWidth:0, flex:1 }}>
               <p style={{
-                fontFamily:FONT_D, fontSize:18, fontWeight:900, color:"#fff",
-                margin:"0 0 6px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                letterSpacing:"-0.3px",
+                fontFamily:F.display, fontSize:18, fontWeight:700, color:"#fff",
+                marginBottom:6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                letterSpacing:"-0.2px",
               }}>{str(n.product_title) ?? "Untitled Product"}</p>
               <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
                 {price
-                  ? <span style={{ fontSize:15, fontWeight:800, color:"#bfdbfe", letterSpacing:"-0.2px", fontFamily:FONT }}>{price}</span>
-                  : <span style={{ fontSize:13, color:"rgba(255,255,255,0.4)", fontStyle:"italic", fontFamily:FONT }}>Price not listed</span>
+                  ? <span style={{ fontSize:14, fontWeight:700, color:"#bfdbfe", fontFamily:F.body }}>{price}</span>
+                  : <span style={{ fontSize:12, color:"rgba(255,255,255,0.4)", fontStyle:"italic", fontFamily:F.body }}>Price not listed</span>
                 }
                 {str(n.product_city) && (
-                  <span style={{ fontSize:12, color:"rgba(255,255,255,0.6)", display:"flex", alignItems:"center", gap:3, fontFamily:FONT }}>
-                    📍 {n.product_city}
+                  <span style={{ display:"flex", alignItems:"center", gap:4, fontSize:11.5, color:"rgba(255,255,255,0.6)", fontFamily:F.body }}>
+                    <Icon.MapPin width={10} height={10}/> {n.product_city}
                   </span>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Status selector strip */}
+          {/* Status strip */}
           <div style={{
-            background:"rgba(0,0,0,0.18)", borderRadius:12, padding:"10px 14px",
+            background:"rgba(0,0,0,0.2)", margin:"0 -20px",
+            padding:"10px 20px",
             display:"flex", alignItems:"center", gap:10, flexWrap:"wrap",
             position:"relative", zIndex:1,
           }}>
             <span style={{
-              fontSize:10, color:"rgba(255,255,255,0.5)", fontWeight:700,
-              letterSpacing:"0.10em", textTransform:"uppercase",
-              whiteSpace:"nowrap", flexShrink:0, fontFamily:FONT,
+              fontSize:9.5, color:"rgba(255,255,255,0.45)", fontWeight:700,
+              letterSpacing:".12em", textTransform:"uppercase", fontFamily:F.body, flexShrink:0,
             }}>Set Status</span>
 
-            <div style={{ display:"flex", gap:6, flex:1, flexWrap:"wrap" }}>
-              {Object.entries(STATUS_BTN).map(([key, cfg]) => {
+            <div style={{ display:"flex", gap:5, flex:1, flexWrap:"wrap" }}>
+              {Object.entries(STATUS_BTN_CFG).map(([key, cfg]) => {
                 const isActive = status === key;
+                const IconComp = key === "accepted" ? Icon.CheckCircle : key === "rejected" ? Icon.XCircle : Icon.Clock;
                 return (
-                  <button key={key} className="mn-status-btn"
+                  <button key={key} className={`mn-status-btn${isActive ? " mn-status-active" : ""}`}
                     onClick={() => handleStatusChange(key)}
                     style={{
-                      fontSize:12, fontWeight:700, padding:"6px 14px", borderRadius:40,
-                      border:`1.5px solid ${isActive ? cfg.activeBorder : "rgba(255,255,255,0.22)"}`,
-                      background: isActive ? cfg.activeBg : "rgba(255,255,255,0.10)",
-                      color: isActive ? cfg.activeColor : "rgba(255,255,255,0.82)",
-                      fontFamily:FONT,
+                      fontFamily:F.body, fontSize:11.5, fontWeight:700,
+                      padding:"5px 12px", borderRadius:7,
+                      border:`1.5px solid ${isActive ? cfg.activeBorder : "rgba(255,255,255,0.2)"}`,
+                      background: isActive ? cfg.activeBg : "rgba(255,255,255,0.08)",
+                      color: isActive ? cfg.activeColor : "rgba(255,255,255,0.75)",
                       display:"flex", alignItems:"center", gap:5, whiteSpace:"nowrap",
                     }}
                   >
-                    {isActive && <CheckIcon size={11} />}
+                    <IconComp width={11} height={11}/>
                     {key.charAt(0).toUpperCase() + key.slice(1)}
                   </button>
                 );
@@ -836,130 +1020,113 @@ function DetailModal({ n, onClose, onStatusUpdate }) {
             </div>
 
             <span style={{
-              fontSize:11, color:"rgba(255,255,255,0.55)",
-              minWidth:52, textAlign:"right",
-              display:"flex", alignItems:"center", gap:4, justifyContent:"flex-end",
-              flexShrink:0, fontFamily:FONT,
+              fontSize:10.5, color:"rgba(255,255,255,0.5)",
+              display:"flex", alignItems:"center", gap:4, flexShrink:0,
+              fontFamily:F.body,
             }}>
               {saving ? (
                 <>
                   <span style={{
-                    width:11, height:11, borderRadius:"50%",
-                    border:"2px solid rgba(255,255,255,0.25)", borderTopColor:"#fff",
-                    display:"inline-block", animation:"spin 0.7s linear infinite",
-                  }} />
+                    width:10, height:10, borderRadius:"50%",
+                    border:"2px solid rgba(255,255,255,0.3)", borderTopColor:"#fff",
+                    animation:"spin .7s linear infinite", display:"inline-block",
+                  }}/>
                   Saving…
                 </>
-              ) : saved ? "✓ Saved" : ""}
+              ) : saved ? (
+                <>
+                  <Icon.Check width={10} height={10}/>
+                  Saved
+                </>
+              ) : null}
             </span>
           </div>
         </div>
 
-        {/* ── MODAL BODY — smooth scroll ── */}
-        <div className="mn-modal-body" style={{
-          flex:1, padding:"20px 22px 8px",
-          contain:"content",
+        {/* Modal Body */}
+        <div className="mn-scroll" style={{
+          flex:1, padding:"18px 20px 8px",
+          overflowY:"auto", overscrollBehavior:"contain",
+          WebkitOverflowScrolling:"touch",
         }}>
-
-          {/* ── Buyer Details ── */}
-          <SectionLabel>Buyer Details</SectionLabel>
-          <div style={s.modalSection}>
-            {/* Avatar + name + badge row */}
+          {/* Buyer Details */}
+          <SectionLabel icon={<Icon.User width={11} height={11}/>}>Buyer Details</SectionLabel>
+          <div style={S.modalBox}>
             <div style={{
-              padding:"16px 18px",
-              display:"flex", alignItems:"center", gap:14,
-              borderBottom:"1px solid #e8f0fb",
+              padding:"14px 16px", display:"flex", alignItems:"center", gap:12,
+              borderBottom:`1px solid ${C.lineSoft}`,
             }}>
-              <AvatarCircle name={buyerName} initials={initials} image={n.buyer_profile_image} size={52} />
+              <Avatar name={buyerName} initials={initials} image={n.buyer_profile_image} size={48}/>
               <div style={{ minWidth:0, flex:1 }}>
-                <p style={{ fontFamily:FONT, fontWeight:800, fontSize:15.5, color:"#0f172a", margin:"0 0 3px", letterSpacing:"-0.02em" }}>
+                <p style={{ fontFamily:F.body, fontWeight:700, fontSize:15, color:C.ink, marginBottom:3, letterSpacing:"-0.02em" }}>
                   {buyerName}
                 </p>
                 {str(n.buyer_email)
                   ? <a href={`mailto:${n.buyer_email}`}
-                      style={{ color:BLUE, textDecoration:"none", fontFamily:FONT, fontSize:12.5 }}
                       onClick={e => e.stopPropagation()}
+                      style={{ color:C.accent, textDecoration:"none", fontFamily:F.body, fontSize:12 }}
                     >{n.buyer_email}</a>
-                  : <span style={{ color:"#94a3b8", fontStyle:"italic", fontFamily:FONT, fontSize:12.5 }}>No email provided</span>
+                  : <span style={{ color:C.ink3, fontStyle:"italic", fontFamily:F.body, fontSize:12 }}>No email provided</span>
                 }
               </div>
-              <StatusBadge status={status} />
+              <StatusBadge status={status}/>
             </div>
 
-            {/* Detail rows — 2-column grid for compactness */}
-            <div style={{
-              display:"grid", gridTemplateColumns:"1fr 1fr",
-              gap:0,
-            }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr" }}>
               {[
-                { label:"Phone",   icon:"📞", value: `+974 ${str(n.buyer_phone) || FALLBACK}` },
-                { label:"City",    icon:"🏙️",  value: str(n.buyer_city)    ?? FALLBACK },
-                { label:"State",   icon:"📌", value: str(n.buyer_state)   ?? FALLBACK },
-                { label:"Address", icon:"🏠", value: str(n.buyer_address) ?? FALLBACK, wide: true },
+                { label:"Phone",   Icon_:Icon.Phone,  value:`+974 ${str(n.buyer_phone) || FALLBACK}` },
+                { label:"City",    Icon_:Icon.MapPin,  value:str(n.buyer_city)    ?? FALLBACK },
+                { label:"State",   Icon_:Icon.Tag,     value:str(n.buyer_state)   ?? FALLBACK },
+                { label:"Address", Icon_:Icon.Home,    value:str(n.buyer_address) ?? FALLBACK, wide:true },
               ].map((row, idx) => (
-                <div
-                  key={row.label}
-                  style={{
-                    gridColumn: row.wide ? "1 / -1" : undefined,
-                    display:"flex", flexDirection:"column", gap:3,
-                    padding:"12px 18px",
-                    borderTop:"1px solid #f0f6ff",
-                    borderRight: (!row.wide && idx % 2 === 0) ? "1px solid #f0f6ff" : undefined,
-                  }}
-                >
-                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                    <span style={{ fontSize:12 }}>{row.icon}</span>
-                    <span style={{ fontSize:11, color:"#94a3b8", fontWeight:700, letterSpacing:".04em", textTransform:"uppercase", fontFamily:FONT }}>
+                <div key={row.label} style={{
+                  gridColumn: row.wide ? "1/-1" : undefined,
+                  padding:"10px 16px",
+                  borderTop:`1px solid ${C.lineSoft}`,
+                  borderRight: (!row.wide && idx % 2 === 0) ? `1px solid ${C.lineSoft}` : undefined,
+                }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:4 }}>
+                    <row.Icon_ width={10} height={10} style={{ color:C.ink3 }}/>
+                    <span style={{ fontSize:9.5, color:C.ink3, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", fontFamily:F.body }}>
                       {row.label}
                     </span>
                   </div>
                   <span style={{
-                    fontSize:13, fontWeight:600, fontFamily:FONT,
-                    color: row.value === FALLBACK ? "#d1d5db" : "#1e293b",
+                    fontSize:12.5, fontWeight:600, fontFamily:F.body,
+                    color: row.value === FALLBACK ? C.line : C.ink,
                     fontStyle: row.value === FALLBACK ? "italic" : "normal",
-                    paddingLeft:18,
-                  }}>
-                    {row.value}
-                  </span>
+                  }}>{row.value}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* ── Request Info ── */}
-          <SectionLabel>Request Info</SectionLabel>
-          <div style={{ ...s.modalSection, marginBottom:20 }}>
-            <div style={{
-              display:"grid", gridTemplateColumns:"1fr 1fr",
-              gap:0,
-            }}>
+          {/* Request Info */}
+          <SectionLabel icon={<Icon.Hash width={11} height={11}/>}>Request Info</SectionLabel>
+          <div style={{ ...S.modalBox, marginBottom:18 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr" }}>
               {[
-                { label:"Status",     icon:"🔖", node: <StatusBadge status={status} /> },
-                { label:"Product ID", icon:"#",  text: n.product_id != null ? `#${n.product_id}` : FALLBACK },
-                { label:"Received",   icon:"🕐", text: formatDate(n.created_at), wide: true },
-                { label:"Read",       icon:"👁️",  text: n.is_read ? "Yes — read" : "No — unread" },
+                { label:"Status",     Icon_:Icon.Tag,   node:<StatusBadge status={status}/> },
+                { label:"Product ID", Icon_:Icon.Hash,  text: n.product_id != null ? `#${n.product_id}` : FALLBACK },
+                { label:"Received",   Icon_:Icon.Clock, text: formatDate(n.created_at), wide:true },
+                { label:"Read",       Icon_:Icon.Eye,   text: n.is_read ? "Read" : "Unread" },
               ].map((row, idx) => (
-                <div
-                  key={row.label}
-                  style={{
-                    gridColumn: row.wide ? "1 / -1" : undefined,
-                    display:"flex", flexDirection:"column", gap:3,
-                    padding:"12px 18px",
-                    borderTop: idx > 0 ? "1px solid #f0f6ff" : undefined,
-                    borderRight: (!row.wide && idx % 2 === 0) ? "1px solid #f0f6ff" : undefined,
-                  }}
-                >
-                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                    <span style={{ fontSize:12 }}>{row.icon}</span>
-                    <span style={{ fontSize:11, color:"#94a3b8", fontWeight:700, letterSpacing:".04em", textTransform:"uppercase", fontFamily:FONT }}>
+                <div key={row.label} style={{
+                  gridColumn: row.wide ? "1/-1" : undefined,
+                  padding:"10px 16px",
+                  borderTop: idx > 0 ? `1px solid ${C.lineSoft}` : undefined,
+                  borderRight: (!row.wide && idx % 2 === 0) ? `1px solid ${C.lineSoft}` : undefined,
+                }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:4 }}>
+                    <row.Icon_ width={10} height={10} style={{ color:C.ink3 }}/>
+                    <span style={{ fontSize:9.5, color:C.ink3, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", fontFamily:F.body }}>
                       {row.label}
                     </span>
                   </div>
-                  <div style={{ paddingLeft:18 }}>
-                    {row.node
-                      ? row.node
-                      : <span style={{ fontSize:13, fontWeight:600, color:"#1e293b", fontFamily:FONT }}>{row.text}</span>
-                    }
+                  <div>
+                    {row.node ?? (
+                      <span style={{ fontSize:12.5, fontWeight:600, fontFamily:F.body, color:C.ink }}>{row.text}</span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -967,23 +1134,22 @@ function DetailModal({ n, onClose, onStatusUpdate }) {
           </div>
         </div>
 
-        {/* ── MODAL FOOTER ── */}
+        {/* Modal Footer */}
         <div style={{
-          padding:"14px 22px", borderTop:"1px solid #e0ecfb",
-          display:"flex", justifyContent:"flex-end", gap:10,
-          background:"#f7fbff", flexShrink:0,
+          padding:"12px 20px", borderTop:`1px solid ${C.line}`,
+          background:C.lineSoft, display:"flex", justifyContent:"flex-end", gap:8, flexShrink:0,
         }}>
-          <button className="mn-btn-cancel" onClick={onClose} style={{
-            fontFamily:FONT, fontSize:13, fontWeight:600,
-            color:"#64748b", background:"#fff", border:"1.5px solid #e0ecfb",
-            padding:"8px 20px", borderRadius:12, cursor:"pointer",
+          <button className="mn-cancel-btn" onClick={onClose} style={{
+            fontFamily:F.body, fontSize:12.5, fontWeight:600, color:C.inkLight,
+            background:C.white, border:`1px solid ${C.line}`,
+            padding:"7px 18px", borderRadius:9, cursor:"pointer",
           }}>Cancel</button>
 
-          <button className="mn-footer-done" onClick={onClose} style={{
-            fontFamily:FONT, fontSize:13, fontWeight:700,
-            color:"#fff", background:`linear-gradient(130deg, #0f3460, ${BLUE})`,
-            border:"none", padding:"8px 24px", borderRadius:12, cursor:"pointer",
-            boxShadow:`0 4px 14px rgba(21,101,192,.26)`,
+          <button className="mn-done-btn" onClick={onClose} style={{
+            fontFamily:F.body, fontSize:12.5, fontWeight:700, color:"#fff",
+            background:`linear-gradient(135deg,${C.accentDk},${C.accent})`,
+            border:"none", padding:"7px 22px", borderRadius:9, cursor:"pointer",
+            boxShadow:`0 4px 16px rgba(61,90,254,.28)`,
           }}>Done</button>
         </div>
       </div>
@@ -991,178 +1157,30 @@ function DetailModal({ n, onClose, onStatusUpdate }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   SUB-COMPONENTS
-════════════════════════════════════════════════════════════════ */
-function AvatarCircle({ name, initials, image, size = 32 }) {
-  const [failed, setFailed] = useState(false);
+/* ─── SectionLabel ────────────────────────────────────────────────────────── */
+function SectionLabel({ children, icon }) {
   return (
-    <div style={{
-      width:size, height:size, borderRadius:"50%", background:BLUELT,
-      display:"flex", alignItems:"center", justifyContent:"center",
-      fontSize:Math.round(size * 0.35), fontWeight:800, color:BLUE,
-      flexShrink:0, overflow:"hidden", fontFamily:FONT,
-    }}>
-      {image && !failed
-        ? <img src={image} alt={name} style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={() => setFailed(true)} />
-        : initials
-      }
+    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
+      {icon && <span style={{ color:C.ink3 }}>{icon}</span>}
+      <p style={{ fontFamily:F.body, fontSize:9.5, fontWeight:800, letterSpacing:".12em", color:C.ink3, textTransform:"uppercase" }}>
+        {children}
+      </p>
     </div>
   );
 }
 
-function ProductThumb({ src, alt, size, fullHeight = false }) {
-  const [failed, setFailed] = useState(false);
-  const dim = typeof size === "number" ? { width:size, height:size } : { width:"100%", height: fullHeight ? "100%" : size };
-  if (src && !failed) {
-    return <img src={src} alt={alt} style={{ ...dim, objectFit:"cover", display:"block" }} onError={() => setFailed(true)} />;
-  }
-  return (
-    <div style={{
-      ...dim, background:`linear-gradient(135deg, ${BLUELT}, #ddeeff)`,
-      display:"flex", alignItems:"center", justifyContent:"center",
-      fontSize: typeof size === "number" ? Math.round(size * 0.4) : 28,
-    }}>📦</div>
-  );
-}
-
-function SectionLabel({ children }) {
-  return (
-    <p style={{
-      fontFamily:FONT, fontSize:10, fontWeight:800, letterSpacing:"0.10em",
-      color:"#94a3b8", textTransform:"uppercase", margin:"0 0 8px",
-    }}>{children}</p>
-  );
-}
-
-function BellIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-      stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-    </svg>
-  );
-}
-
-function CheckIcon({ size = 13 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 12 12" fill="none"
-      stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="2,6 5,9 10,3" />
-    </svg>
-  );
-}
-
-/* ─── Styles ─────────────────────────────────────────────────── */
-const s = {
-  page: {
-    minHeight:"100vh",
-    background:"#f0f6ff",
-    fontFamily:FONT,
+/* ─── Styles ──────────────────────────────────────────────────────────────── */
+const S = {
+  sideCard: {
+    background:C.white, borderRadius:14,
+    border:`1px solid ${C.line}`, padding:"14px 16px",
+    boxShadow:"0 2px 12px rgba(61,90,254,0.05)",
   },
-  hero: {
-    position:"relative",
-    background:"linear-gradient(130deg, #0f3460 0%, #1565c0 50%, #1976d2 100%)",
+  modalBox: {
+    background:C.white,
+    borderRadius:12,
+    border:`1px solid ${C.line}`,
     overflow:"hidden",
-  },
-  heroDots: {
-    position:"absolute", inset:0, pointerEvents:"none",
-    backgroundImage:"radial-gradient(rgba(255,255,255,0.08) 1px, transparent 1px)",
-    backgroundSize:"28px 28px",
-  },
-  orb: {
-    position:"absolute", borderRadius:"50%",
-    background:"rgba(255,255,255,0.06)",
-    animation:"floatOrb 7s ease-in-out infinite",
-    pointerEvents:"none",
-  },
-  heroWave: {
-    position:"absolute", bottom:0, left:0,
-    width:"200%", height:60, zIndex:1, pointerEvents:"none",
-  },
-  heroInner: {
-    position:"relative", zIndex:2,
-    padding:"36px 32px 72px",
-    maxWidth:1100, margin:"0 auto",
-  },
-  heroLabel: {
-    display:"inline-flex", alignItems:"center", gap:7,
-    background:"rgba(255,255,255,0.13)",
-    border:"1px solid rgba(255,255,255,0.25)",
-    borderRadius:40, padding:"5px 14px",
-    fontSize:12, fontWeight:700, color:"#bfdbfe",
-    fontFamily:FONT, marginBottom:12,
-    backdropFilter:"blur(8px)",
-    animation:"fadeIn 0.4s ease both",
-  },
-  heroTitle: {
-    fontFamily:FONT_D,
-    fontSize:"clamp(26px, 4vw, 42px)",
-    fontWeight:900, color:"#fff",
-    letterSpacing:"-0.5px", lineHeight:1.15,
-    margin:"0 0 8px",
-    animation:"fadeUp 0.45s ease both",
-    animationDelay:"0.08s",
-  },
-  heroSub: {
-    fontSize:14, color:"rgba(255,255,255,0.7)",
-    fontFamily:FONT, fontWeight:400, margin:0,
-    animation:"fadeUp 0.45s ease both", animationDelay:"0.16s",
-  },
-  statRow: {
-    display:"flex", flexWrap:"wrap", gap:10, marginTop:24,
-    animation:"fadeUp 0.45s ease both", animationDelay:"0.24s",
-  },
-  statPill: {
-    display:"inline-flex", alignItems:"center", gap:8,
-    background:"rgba(255,255,255,0.13)",
-    backdropFilter:"blur(12px)",
-    border:"1px solid rgba(255,255,255,0.22)",
-    borderRadius:40, padding:"8px 18px",
-    color:"#fff", fontFamily:FONT, fontSize:13, fontWeight:600,
-    cursor:"default",
-  },
-  body: {
-    maxWidth:1100, margin:"0 auto",
-    padding:"clamp(16px, 3vw, 32px) clamp(12px, 3vw, 28px)",
-    position:"relative", zIndex:2,
-  },
-  layout: {
-    display:"grid",
-    gridTemplateColumns:"1fr 280px",
-    gap:24, alignItems:"start",
-  },
-  filterBar: {
-    background:"#fff",
-    borderRadius:22,
-    boxShadow:"0 4px 32px rgba(21,101,192,0.08), 0 1px 4px rgba(0,0,0,0.03)",
-    border:"1.5px solid #e0ecfb",
-    overflow:"hidden",
-    position:"sticky", top:12, zIndex:50,
-    animation:"fadeUp 0.45s ease both",
-  },
-  sidebar: {
-    display:"flex", flexDirection:"column", gap:16,
-    position:"sticky", top:82,
-    animation:"fadeUp 0.45s ease both", animationDelay:"0.2s",
-  },
-  infoCard: {
-    background:"#fff", borderRadius:18,
-    border:"1px solid #e0ecfb", padding:"16px 18px",
-    boxShadow:"0 2px 16px rgba(21,101,192,0.06)",
-  },
-  infoHead: {
-    display:"flex", alignItems:"center", gap:10, marginBottom:10,
-  },
-  infoTitle: {
-    fontSize:14, fontWeight:800, color:"#0f172a", fontFamily:FONT,
-  },
-  modalSection: {
-    background:"#f7fbff",
-    borderRadius:14,
-    border:"1px solid #e4eef9",
-    overflow:"hidden",
-    marginBottom:16,
+    marginBottom:14,
   },
 };

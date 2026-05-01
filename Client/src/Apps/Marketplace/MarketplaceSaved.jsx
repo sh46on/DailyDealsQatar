@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef, memo } from "react";
 import {
   fetchSavedProducts,
   toggleSaveProduct,
@@ -6,748 +6,805 @@ import {
 } from "./api/marketplaceApi";
 import MarketplaceLayout from "./MarketplaceLayout";
 
-/* ═══════════════════════════════════════════════════
-   DESIGN TOKENS — mirrored 1-to-1 from MarketplaceProfile
-═══════════════════════════════════════════════════ */
-const FONT   = "'Plus Jakarta Sans', sans-serif";   // replaces Sora + DM Sans
-const FONT_D = "'Fraunces', serif";                 // display / headings
+/* ─────────────────────────────────────────────────
+   DESIGN TOKENS
+───────────────────────────────────────────────── */
+const FONT   = "'DM Sans', sans-serif";
+const FONT_D = "'Playfair Display', serif";
 
-const BLUE   = "#1565c0";
-const BLUE2  = "#1976d2";
-const BLUELT = "#e3f2fd";
-const BLUEM  = "#bfdbfe";
+const C = {
+  navy:    "#1c3560",
+  blue:    "#1a56db",
+  blueM:   "#3b82f6",
+  blueLt:  "#eff6ff",
+  blueMid: "#bfdbfe",
+  amber:   "#d97706",
+  red:     "#dc2626",
+  redLt:   "#fff1f2",
+  redBd:   "#fecdd3",
+  green:   "#16a34a",
+  greenLt: "#f0fdf4",
+  greenBd: "#86efac",
+  teal:    "#0d9488",
+  tealLt:  "#f0fdfa",
+  tealBd:  "#99f6e4",
+  slate:   "#64748b",
+  slateL:  "#94a3b8",
+  border:  "#e2e8f0",
+  bg:      "#f8fafc",
+  card:    "#ffffff",
+};
 
-/* ═══════════════════════════════════════════════════
-   GLOBAL CSS
-═══════════════════════════════════════════════════ */
-const styles = `
-  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:wght@700;900&display=swap');
+/* ─────────────────────────────────────────────────
+   STYLES
+───────────────────────────────────────────────── */
+const STYLES = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Playfair+Display:wght@700;900&display=swap');
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* ── Keyframes (shared names with Profile / Home / Interests) ── */
-  @keyframes fadeUp    { from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:none;} }
+  @keyframes fadeUp    { from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;} }
   @keyframes fadeIn    { from{opacity:0;}to{opacity:1;} }
   @keyframes shimmer   { 0%{background-position:-600px 0;}100%{background-position:600px 0;} }
-  @keyframes floatOrb  { 0%,100%{transform:translateY(0);}50%{transform:translateY(-14px);} }
-  @keyframes waveSlide { to{transform:translateX(-50%);} }
-  @keyframes pulse     { 0%,100%{opacity:1;transform:scale(1);}50%{opacity:.45;transform:scale(1.35);} }
-  @keyframes toastIn   { from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;} }
-  @keyframes mspSpin   { to{transform:rotate(360deg);} }
-  @keyframes mspSlideOut {
-    from{opacity:1;max-height:200px;transform:translateX(0);}
-    to  {opacity:0;max-height:0;   transform:translateX(28px);padding:0;margin:0;}
+  @keyframes floatY    { 0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);} }
+  @keyframes waveDrift { to{transform:translateX(-50%);} }
+  @keyframes spin      { to{transform:rotate(360deg);} }
+  @keyframes pulseDot  { 0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(1.4);} }
+  @keyframes slideOut  {
+    from { opacity:1; max-height:120px; margin-bottom:10px; transform:translateX(0); }
+    to   { opacity:0; max-height:0;     margin-bottom:0;    transform:translateX(24px); padding:0; }
   }
+  @keyframes toastPop  { from{opacity:0;transform:translateX(-50%) translateY(10px);}to{opacity:1;transform:translateX(-50%) translateY(0);} }
+  @keyframes imgReveal { from{opacity:0;transform:scale(1.06);}to{opacity:1;transform:scale(1);} }
 
-  /* ── Page ── */
-  .msp-page {
+  .ms-page {
     font-family: ${FONT};
-    background: #f0f6ff;          /* Profile's page background */
+    background: ${C.bg};
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
   }
 
   /* ── Hero ── */
-  .msp-hero {
+  .ms-hero {
     position: relative;
-    background: linear-gradient(130deg, #0f3460 0%, ${BLUE} 50%, ${BLUE2} 100%);
+    background: linear-gradient(135deg, ${C.navy} 0%, #123786 50%, #244ba0 100%);
     overflow: hidden;
   }
-  /* dot grid — identical to Profile */
-  .msp-hero-dots {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background-image: radial-gradient(rgba(255,255,255,0.08) 1px, transparent 1px);
-    background-size: 28px 28px;
+  .ms-hero-grid {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
+    background-size: 36px 36px;
   }
-  /* floating orbs — same floatOrb animation, no blur */
-  .msp-orb {
-    position: absolute;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.06);
-    animation: floatOrb 7s ease-in-out infinite;
-    pointer-events: none;
+  .ms-orb {
+    position: absolute; border-radius: 50%; pointer-events: none;
+    animation: floatY 8s ease-in-out infinite;
   }
-  /* dual-path wave — same waveSlide as Profile */
-  .msp-wave-svg {
-    position: absolute;
-    bottom: 0; left: 0;
-    width: 200%; height: 60px;
-    z-index: 1;
-    pointer-events: none;
+  .ms-wave {
+    position: absolute; bottom: 0; left: 0;
+    width: 200%; height: 52px; z-index: 1; pointer-events: none;
   }
-  .msp-hero-inner {
-    position: relative;
-    z-index: 2;
-    max-width: 960px;
-    margin: 0 auto;
-    padding: clamp(36px,6vw,64px) clamp(16px,5vw,48px) clamp(52px,7vw,80px);
+  .ms-hero-body {
+    position: relative; z-index: 2;
+    max-width: 1080px; margin: 0 auto;
+    padding: clamp(32px,5vw,60px) clamp(16px,5vw,40px) clamp(48px,7vw,76px);
   }
-
-  /* eyebrow chip — Profile's glass pill */
-  .msp-eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: rgba(255,255,255,0.13);
-    border: 1px solid rgba(255,255,255,0.25);
-    border-radius: 40px;
-    padding: 5px 14px;
-    margin-bottom: 16px;
-    backdrop-filter: blur(8px);
-    font-family: ${FONT};
-    font-size: 12px;
-    font-weight: 700;
-    color: rgba(255,255,255,0.90);
-    letter-spacing: 0.04em;
+  .ms-eyebrow {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+    border-radius: 99px; padding: 4px 13px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .07em;
+    text-transform: uppercase; color: rgba(255,255,255,.85);
+    margin-bottom: 14px; backdrop-filter: blur(8px);
     animation: fadeIn .4s ease both;
   }
-  .msp-eyebrow-dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: #34d399;
-    animation: pulse 1.6s infinite;
-    flex-shrink: 0;
+  .ms-eyebrow-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: #34d399; flex-shrink: 0;
+    animation: pulseDot 1.7s ease-in-out infinite;
   }
-
-  /* hero title — Fraunces 900, same as Profile */
-  .msp-hero h1 {
+  .ms-hero-title {
     font-family: ${FONT_D};
-    font-size: clamp(26px, 5vw, 42px);
-    font-weight: 900;
-    color: #fff;
-    letter-spacing: -0.5px;
-    line-height: 1.15;
-    margin-bottom: 10px;
-    animation: fadeUp .45s ease both;
-    animation-delay: .08s;
+    font-size: clamp(24px,4.5vw,40px);
+    font-weight: 900; color: #fff;
+    line-height: 1.12; letter-spacing: -.025em;
+    margin-bottom: 8px;
+    animation: fadeUp .4s ease both .06s;
   }
-  .msp-hero-sub {
-    color: rgba(255,255,255,0.70);
-    font-family: ${FONT};
-    font-size: clamp(13px, 2vw, 15px);
-    font-weight: 400;
-    line-height: 1.6;
-    max-width: 440px;
-    animation: fadeUp .45s ease both;
-    animation-delay: .16s;
+  .ms-hero-title span {
+    background: linear-gradient(90deg, #60a5fa 0%, #34d399 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
-
-  /* count badge — Profile's glass stat pill */
-  .msp-hero-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 9px;
-    margin-top: 24px;
-    background: rgba(255,255,255,0.13);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255,255,255,0.22);
-    border-radius: 40px;
-    padding: 8px 18px;
-    font-family: ${FONT};
-    font-size: 13px;
-    font-weight: 700;
-    color: #fff;
-    animation: fadeUp .45s ease both;
-    animation-delay: .24s;
-    cursor: default;
-    transition: background .2s;
+  .ms-hero-sub {
+    color: rgba(255,255,255,.58); font-size: clamp(12.5px,1.8vw,14px);
+    line-height: 1.65; max-width: 380px;
+    animation: fadeUp .4s ease both .13s;
   }
-  .msp-hero-badge:hover { background: rgba(255,255,255,0.22); }
+  .ms-hero-pills {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-top: 20px; animation: fadeUp .4s ease both .2s;
+  }
+  .ms-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,.1); backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,.17); border-radius: 99px;
+    padding: 6px 14px; font-size: 12.5px; font-weight: 600; color: #fff;
+    cursor: default; transition: background .2s;
+  }
+  .ms-pill:hover { background: rgba(255,255,255,.17); }
+  .ms-pill-num { font-family: ${FONT_D}; font-size: 15px; font-weight: 700; color: #60a5fa; }
 
-  /* ── Ad slots — Profile's hatched-diagonal placeholder ── */
-  .msp-ad-wrap  { max-width: 960px; margin: 0 auto; padding: 0 clamp(12px,4vw,24px); }
-  .msp-ad-top   { margin-top: 20px; }
-  .msp-ad-bottom{ padding-bottom: 40px; margin-top: 4px; }
-
-  .msp-ad-slot {
-    width: 100%;
-    background: repeating-linear-gradient(
-      45deg,#f8fafc,#f8fafc 10px,#eef3fa 10px,#eef3fa 20px
-    );
+  /* ── Ads ── */
+  .ms-ad-wrap { max-width: 1080px; margin: 0 auto; padding: 0 clamp(14px,4vw,24px); }
+  .ms-ad-top  { margin-top: 20px; }
+  .ms-ad-bot  { margin-top: 6px; padding-bottom: 40px; }
+  .ms-ad {
+    width: 100%; border-radius: 12px;
+    background: repeating-linear-gradient(45deg,#f8fafc,#f8fafc 10px,#f1f5f9 10px,#f1f5f9 20px);
     border: 1.5px dashed #cbd5e1;
-    border-radius: 14px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    transition: box-shadow .18s, transform .18s;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 3px;
   }
-  .msp-ad-slot:hover { box-shadow: 0 8px 28px rgba(21,101,192,0.12); transform: translateY(-2px); }
-  .msp-ad-label {
-    font-size: 9.5px; font-weight: 700;
-    color: #94a3b8; letter-spacing: 1px;
-    text-transform: uppercase; font-family: ${FONT};
-  }
-  .msp-ad-sub { font-size: 12px; color: #cbd5e1; font-family: ${FONT}; font-weight: 600; }
-  .msp-ad-leaderboard { height: 90px; max-width: 728px; margin: 0 auto; }
-  .msp-ad-rect-wrap { display: flex; justify-content: center; margin: 2px 0; }
-  .msp-ad-rect { height: 250px; max-width: 300px; width: 100%; }
+  .ms-ad-lbl { font-size: 9px; font-weight: 800; letter-spacing: .1em; color: #94a3b8; text-transform: uppercase; }
+  .ms-ad-sub { font-size: 11px; font-weight: 600; color: #cbd5e1; }
+  .ms-ad-leader { height: 80px; max-width: 728px; margin: 0 auto; }
+  .ms-ad-rect-wrap { display: flex; justify-content: center; margin: 2px 0; grid-column: 1 / -1; }
+  .ms-ad-rect { height: 240px; max-width: 300px; width: 100%; }
 
   /* ── Content ── */
-  .msp-content {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 20px clamp(12px,4vw,24px) 48px;
+  .ms-content {
+    max-width: 1080px; margin: 0 auto;
+    padding: 20px clamp(14px,4vw,24px) 52px;
+  }
+  .ms-section-head {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+  }
+  .ms-section-title {
+    font-family: ${FONT_D}; font-size: 15px; font-weight: 700;
+    color: ${C.navy}; letter-spacing: -.015em; white-space: nowrap;
+  }
+  .ms-divider {
+    flex: 1; height: 1px;
+    background: linear-gradient(90deg, ${C.blueMid}, transparent);
   }
 
-  /* ── Empty state ── */
-  .msp-empty {
-    text-align: center;
-    padding: clamp(48px,8vw,88px) 24px;
-    animation: fadeUp .45s ease both;
-  }
-  .msp-empty-icon {
-    width: 84px; height: 84px;
-    background: ${BLUELT};
-    border: 1.5px solid ${BLUEM};
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    margin: 0 auto 20px;
-    color: ${BLUE};
-    animation: floatOrb 4s ease-in-out infinite;
-  }
-  .msp-empty h3 {
-    font-family: ${FONT_D};
-    font-size: clamp(18px,4vw,24px);
-    font-weight: 900;
-    color: #0f172a;
-    margin-bottom: 8px;
-    letter-spacing: -0.03em;
-  }
-  .msp-empty p { color: #94a3b8; font-size: 14px; line-height: 1.6; font-family: ${FONT}; }
-
-  /* ── Card grid ── */
-  .msp-grid { display: flex; flex-direction: column; gap: 14px; }
-
-  /* ── Card — Profile card dimensions + border + shadow ── */
-  .msp-card {
-    background: #fff;
-    border-radius: 22px;                                   /* Profile radius */
-    border: 1.5px solid #e0ecfb;                           /* Profile border */
-    box-shadow: 0 4px 32px rgba(21,101,192,0.09),          /* Profile shadow */
-                0 1px 4px rgba(0,0,0,0.04);
+  /* ── Grid: 2-col ≥640, 1-col below ── */
+  .ms-grid {
     display: grid;
-    grid-template-columns: 128px 1fr auto;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  /* ── Card ── */
+  .ms-card {
+    background: ${C.card};
+    border-radius: 14px;
+    border: 1.5px solid ${C.border};
+    box-shadow: 0 1px 8px rgba(10,22,40,.05), 0 1px 2px rgba(0,0,0,.03);
+    display: grid;
+    grid-template-columns: 84px 1fr auto;
+    align-items: stretch;
     overflow: hidden;
-    transition: transform .3s cubic-bezier(.22,1,.36,1),
-                box-shadow .3s cubic-bezier(.22,1,.36,1),
-                border-color .3s cubic-bezier(.22,1,.36,1);
-    animation: fadeUp .42s cubic-bezier(.22,1,.36,1) both;
+    transition:
+      transform .26s cubic-bezier(.22,1,.36,1),
+      box-shadow .26s cubic-bezier(.22,1,.36,1),
+      border-color .22s;
+    animation: fadeUp .36s cubic-bezier(.22,1,.36,1) both;
     position: relative;
-    min-height: 128px;
+    contain: layout style;
+    will-change: transform;
+    min-height: 84px;
   }
-  .msp-card:hover {
-    box-shadow: 0 16px 48px rgba(21,101,192,0.16), 0 2px 8px rgba(21,101,192,0.07);
-    transform: translateY(-4px);
-    border-color: ${BLUEM};
+  .ms-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 32px rgba(26,86,219,.12), 0 2px 5px rgba(0,0,0,.05);
+    border-color: ${C.blueMid};
   }
-  .msp-card.removing { animation: mspSlideOut .32s cubic-bezier(.22,1,.36,1) forwards; }
+  .ms-card.removing {
+    animation: slideOut .26s cubic-bezier(.22,1,.36,1) forwards;
+    pointer-events: none;
+  }
+  /* left accent bar */
+  .ms-card-bar {
+    position: absolute; top: 0; left: 0; bottom: 0; width: 3px;
+    background: linear-gradient(180deg, ${C.blue}, #06b6d4);
+    border-radius: 14px 0 0 14px;
+    opacity: 0; transition: opacity .22s;
+  }
+  .ms-card:hover .ms-card-bar { opacity: 1; }
 
   /* ── Image ── */
-  .msp-img-wrap {
-    width: 128px; height: 128px;
-    overflow: hidden;
-    background: ${BLUELT};
-    flex-shrink: 0;
-    position: relative;
+  .ms-img-cell {
+    width: 84px; height: 84px;
+    overflow: hidden; background: ${C.blueLt};
+    position: relative; flex-shrink: 0;
   }
-  .msp-img-wrap img {
-    width: 100%; height: 100%;
-    object-fit: cover; display: block;
+  .ms-img-cell img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
     transition: transform .42s cubic-bezier(.22,1,.36,1);
+    opacity: 0;
   }
-  .msp-card:hover .msp-img-wrap img { transform: scale(1.07); }
-  .msp-img-placeholder {
-    width: 100%; height: 100%;
+  .ms-img-cell img.loaded { animation: imgReveal .32s ease both; opacity: 1; }
+  .ms-card:hover .ms-img-cell img { transform: scale(1.09); }
+  .ms-img-ph {
+    position: absolute; inset: 0;
     display: flex; align-items: center; justify-content: center;
     color: #93c5fd;
-    background: linear-gradient(135deg, ${BLUELT}, #ddeeff);
+    background: linear-gradient(135deg, ${C.blueLt}, #ddeeff);
   }
 
-  /* ── Card body ── */
-  .msp-card-body {
-    padding: 18px 12px 16px 18px;
+  /* condition pill on image */
+  .ms-cond {
+    position: absolute; bottom: 4px; left: 4px;
+    font-size: 8.5px; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; border-radius: 4px;
+    padding: 2px 5px; backdrop-filter: blur(6px); border: 1px solid;
+    line-height: 1.4; pointer-events: none;
+  }
+  .ms-cond-new   { background:rgba(240,253,250,.92); color:#0d9488; border-color:#0d9488; }
+  .ms-cond-used  { background:rgba(255,251,235,.92); color:${C.amber}; border-color:${C.amber}; }
+  .ms-cond-refurb{ background:rgba(239,246,255,.92); color:${C.blue}; border-color:${C.blueM}; }
+
+  /* ── Info ── */
+  .ms-info {
+    padding: 10px 8px 10px 12px;
     display: flex; flex-direction: column;
-    justify-content: center; gap: 7px;
+    justify-content: center; gap: 4px;
     min-width: 0;
   }
-  .msp-card-title {
-    font-family: ${FONT};
-    font-size: clamp(13px, 2.2vw, 16px);
-    font-weight: 700;
-    color: #0f172a;
+  .ms-card-title {
+    font-family: ${FONT_D};
+    font-size: 13.5px; font-weight: 700;
+    color: ${C.navy}; line-height: 1.25;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    letter-spacing: -0.02em; line-height: 1.3;
+    letter-spacing: -.01em;
   }
-  .msp-card-price {
-    font-family: ${FONT_D};                                /* Fraunces for price */
-    font-size: clamp(17px, 3.5vw, 22px);
-    font-weight: 800;
-    color: ${BLUE};
-    letter-spacing: -0.03em; line-height: 1;
+  .ms-card-price {
+    font-family: ${FONT_D};
+    font-size: 16px; font-weight: 900;
+    color: ${C.blue}; line-height: 1; letter-spacing: -.03em;
   }
-  .msp-card-city {
-    display: inline-flex; align-items: center; gap: 4px;
-    font-family: ${FONT};
-    font-size: 11.5px; font-weight: 600;
-    color: #3b4a6b;
-    background: ${BLUELT};
-    border: 1px solid ${BLUEM};
-    border-radius: 40px;
-    padding: 3px 10px 3px 7px;
-    width: fit-content;
+  .ms-card-price small {
+    font-family: ${FONT}; font-size: 9.5px; font-weight: 600;
+    color: ${C.slateL}; margin-right: 3px; letter-spacing: 0;
+  }
+  .ms-card-tags {
+    display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+    margin-top: 1px;
+  }
+  .ms-city {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 10px; font-weight: 600; color: ${C.slate};
+    background: ${C.bg}; border: 1px solid ${C.border};
+    border-radius: 99px; padding: 2px 7px 2px 5px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 100px;
+  }
+  /* requested inline badge */
+  .ms-req-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 9.5px; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase;
+    color: ${C.teal}; background: ${C.tealLt};
+    border: 1px solid ${C.tealBd}; border-radius: 99px;
+    padding: 2px 7px 2px 5px; white-space: nowrap;
   }
 
-  /* ── Actions column ── */
-  .msp-actions {
+  /* ── Actions ── */
+  .ms-actions {
     display: flex; flex-direction: column;
-    align-items: stretch; gap: 8px;
-    padding: 14px 16px 14px 10px;
+    align-items: stretch; gap: 5px;
+    padding: 9px 10px 9px 7px;
     justify-content: center;
-    flex-shrink: 0; min-width: 112px;
-    border-left: 1px solid #e0ecfb;
+    flex-shrink: 0;
+    border-left: 1px solid ${C.border};
   }
+  .ms-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    font-family: ${FONT}; font-size: 11.5px; font-weight: 700;
+    border-radius: 8px; padding: 6px 10px;
+    cursor: pointer; border: 1.5px solid; white-space: nowrap;
+    outline: none; line-height: 1;
+    transition:
+      background .15s, color .15s, border-color .15s,
+      transform .2s cubic-bezier(.22,1,.36,1), box-shadow .2s;
+    will-change: transform;
+  }
+  .ms-btn:disabled { opacity: .5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+  .ms-btn svg { flex-shrink: 0; }
 
-  /* base button — matches Profile's input/button style */
-  .msp-btn {
-    display: inline-flex; align-items: center;
-    justify-content: center; gap: 6px;
-    font-family: ${FONT};
-    font-size: 12.5px; font-weight: 700;
-    border-radius: 10px;
-    padding: 9px 14px;
-    cursor: pointer;
-    transition: background .18s, color .18s, border-color .18s,
-                transform .18s, box-shadow .18s, opacity .15s;
-    white-space: nowrap; outline: none;
-    width: 100%; border: 1.5px solid;
+  .ms-btn-unsave {
+    background: ${C.redLt}; color: ${C.red}; border-color: ${C.redBd};
+    padding: 6px 8px;           /* icon-only, stays square */
   }
-  .msp-btn svg { flex-shrink: 0; }
-
-  /* unsave — red semantic, consistent with other pages */
-  .msp-btn-unsave {
-    background: #fff1f2;
-    color: #dc2626;
-    border-color: #fecdd3;
+  .ms-btn-unsave:hover:not(:disabled) {
+    background: #fee2e2; border-color: #fca5a5;
+    transform: translateY(-1px); box-shadow: 0 3px 8px rgba(220,38,38,.16);
   }
-  .msp-btn-unsave:hover:not(:disabled) {
-    background: #fee2e2;
-    border-color: #fca5a5;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 14px rgba(220,38,38,0.14);
+  .ms-btn-request {
+    background: linear-gradient(135deg, ${C.blue} 0%, ${C.blueM} 100%);
+    color: #fff; border-color: transparent;
+    box-shadow: 0 2px 7px rgba(26,86,219,.28);
   }
-
-  /* request — Profile's blue gradient button */
-  .msp-btn-request {
-    background: linear-gradient(135deg, ${BLUE} 0%, ${BLUE2} 100%);
-    color: #fff;
-    border-color: transparent;
-    box-shadow: 0 3px 12px rgba(21,101,192,0.28);
-  }
-  .msp-btn-request:hover:not(:disabled) {
+  .ms-btn-request:hover:not(:disabled) {
     transform: translateY(-2px);
-    box-shadow: 0 8px 22px rgba(21,101,192,0.34);
-    filter: brightness(1.06);
+    box-shadow: 0 6px 18px rgba(26,86,219,.36);
+    filter: brightness(1.07);
   }
-  .msp-btn:disabled { opacity: .5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+  .ms-btn-requested {
+    background: ${C.tealLt}; color: ${C.teal};
+    border-color: ${C.tealBd}; cursor: default;
+  }
 
-  /* ── Skeleton — Profile's 90-deg shimmer ── */
-  .msp-skeleton {
-    border-radius: 22px;
-    height: 128px;
-    background: linear-gradient(90deg,#f0f4f8 25%,#e2ecf7 50%,#f0f4f8 75%);
+  /* ── Skeleton ── */
+  .ms-skel {
+    border-radius: 14px; overflow: hidden;
+    background: ${C.card}; border: 1.5px solid ${C.border};
+    display: grid; grid-template-columns: 84px 1fr;
+    min-height: 84px;
+  }
+  .ms-skel-img { width: 84px; background: #f1f5f9; align-self: stretch; }
+  .ms-skel-body {
+    padding: 12px 14px; display: flex;
+    flex-direction: column; justify-content: center; gap: 7px;
+  }
+  .ms-skel-line {
+    border-radius: 4px; height: 10px;
+    background: linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%);
     background-size: 600px 100%;
     animation: shimmer 1.4s linear infinite;
   }
 
-  /* ── Toast — Profile's bottom-center semantic style ── */
-  .msp-toast {
-    position: fixed;
-    bottom: 28px; left: 50%;
-    transform: translateX(-50%);
-    z-index: 9999;
-    display: flex; align-items: center; gap: 10px;
-    padding: 13px 22px;
-    border-radius: 14px;
-    font-family: ${FONT}; font-size: 13.5px; font-weight: 600;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.14);
-    animation: toastIn .3s cubic-bezier(.34,1.56,.64,1) both;
-    white-space: nowrap; pointer-events: none;
-    /* success colours by default — override via class */
-    background: #f0fdf4;
-    border: 1.5px solid #86efac;
-    color: #15803d;
+  /* ── Empty ── */
+  .ms-empty {
+    grid-column: 1 / -1; text-align: center;
+    padding: clamp(52px,8vw,84px) 24px;
+    animation: fadeUp .4s ease both;
   }
-  .msp-toast.error {
-    background: #fff1f2;
-    border-color: #fca5a5;
-    color: #dc2626;
+  .ms-empty-icon {
+    width: 70px; height: 70px; border-radius: 50%;
+    background: ${C.blueLt}; border: 1.5px solid ${C.blueMid};
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 16px; color: ${C.blue};
+    animation: floatY 4s ease-in-out infinite;
   }
+  .ms-empty h3 {
+    font-family: ${FONT_D}; font-size: clamp(16px,3.5vw,21px); font-weight: 700;
+    color: ${C.navy}; margin-bottom: 7px; letter-spacing: -.02em;
+  }
+  .ms-empty p { color: ${C.slateL}; font-size: 13px; line-height: 1.6; max-width: 240px; margin: 0 auto; }
+
+  /* ── Toast ── */
+  .ms-toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    z-index: 9999; pointer-events: none;
+    display: flex; align-items: center; gap: 7px;
+    padding: 10px 17px; border-radius: 10px;
+    font-family: ${FONT}; font-size: 13px; font-weight: 600;
+    box-shadow: 0 8px 28px rgba(0,0,0,.12); white-space: nowrap;
+    animation: toastPop .26s cubic-bezier(.34,1.56,.64,1) both;
+    background: ${C.greenLt}; border: 1.5px solid ${C.greenBd}; color: ${C.green};
+  }
+  .ms-toast.error { background:${C.redLt}; border-color:${C.redBd}; color:${C.red}; }
 
   /* ── Responsive ── */
-  @media (max-width: 768px) {
-    .msp-card { grid-template-columns: 108px 1fr auto; min-height: 108px; }
-    .msp-img-wrap { width: 108px; height: 108px; }
-    .msp-actions { min-width: 96px; padding: 12px 12px 12px 8px; gap: 7px; }
-    .msp-btn { font-size: 12px; padding: 8px 10px; }
-    .msp-card-body { padding: 14px 10px 12px 14px; }
+
+  /* ≤900px — keep 2-col, tighten hero */
+  @media (max-width: 900px) {
+    .ms-hero-body { padding-bottom: clamp(52px,6vw,68px); }
   }
-  @media (max-width: 480px) {
-    .msp-card { grid-template-columns: 88px 1fr auto; min-height: 88px; border-radius: 16px; }
-    .msp-img-wrap { width: 88px; height: 88px; }
-    .msp-hero-inner { padding: 24px 14px 68px; }
-    .msp-content { padding: 14px 12px 40px; }
-    .msp-grid { gap: 10px; }
-    .msp-card-body { padding: 10px 8px 10px 11px; gap: 5px; }
-    .msp-card-title { font-size: 12.5px; }
-    .msp-card-price { font-size: 16px; }
-    .msp-card-city  { font-size: 10.5px; }
-    .msp-actions { min-width: 82px; padding: 9px 10px 9px 4px; gap: 6px; border-left: none; border-top: 1px solid #e0ecfb; }
-    .msp-card { grid-template-columns: 88px 1fr; grid-template-rows: 1fr auto; }
-    .msp-actions { grid-column: 1 / -1; flex-direction: row; }
-    .msp-btn { font-size: 11.5px; padding: 7px 10px; border-radius: 8px; }
-    .msp-ad-leaderboard { height: 50px; max-width: 320px; }
+
+  /* ≤639px — 1-col grid, slightly smaller image */
+  @media (max-width: 639px) {
+    .ms-grid { grid-template-columns: 1fr; gap: 8px; }
+    .ms-content { padding: 14px 12px 40px; }
+    .ms-card { grid-template-columns: 76px 1fr auto; min-height: 76px; }
+    .ms-img-cell { width: 76px; height: 76px; }
+    .ms-skel { grid-template-columns: 76px 1fr; min-height: 76px; }
+    .ms-skel-img { width: 76px; }
+    .ms-card-title { font-size: 13px; }
+    .ms-card-price { font-size: 15px; }
+    .ms-info { padding: 9px 7px 9px 11px; }
+    .ms-actions { padding: 8px 9px 8px 6px; gap: 5px; }
+    .ms-btn { font-size: 11px; padding: 5px 9px; }
+    .ms-btn-unsave { padding: 5px 7px; }
   }
+
+  /* ≤479px — compact, hide button text labels */
+  @media (max-width: 479px) {
+    .ms-hero-body { padding: 22px 14px 60px; }
+    .ms-ad-leader { height: 50px; }
+    .ms-card { grid-template-columns: 68px 1fr auto; min-height: 68px; border-radius: 12px; }
+    .ms-img-cell { width: 68px; height: 68px; }
+    .ms-skel { grid-template-columns: 68px 1fr; min-height: 68px; border-radius: 12px; }
+    .ms-skel-img { width: 68px; }
+    .ms-card-title { font-size: 12.5px; }
+    .ms-card-price { font-size: 14px; }
+    .ms-info { padding: 8px 6px 8px 10px; gap: 3px; }
+    .ms-actions { padding: 7px 8px 7px 5px; border-left: none; border-top: 1px solid ${C.border}; }
+    /* stack actions into a row at very small sizes */
+    .ms-card { grid-template-columns: 68px 1fr; grid-template-rows: 1fr auto; }
+    .ms-actions { grid-column: 1 / -1; flex-direction: row; }
+    .ms-btn-label { display: none; }
+    .ms-btn { padding: 7px; border-radius: 7px; }
+    .ms-btn-unsave { padding: 7px; }
+  }
+
+  /* ≤360px */
   @media (max-width: 360px) {
-    .msp-card { grid-template-columns: 76px 1fr; }
-    .msp-img-wrap { width: 76px; height: 76px; }
-    .msp-btn-label { display: none; }
-    .msp-btn { padding: 8px; }
+    .ms-card { grid-template-columns: 60px 1fr; }
+    .ms-img-cell { width: 60px; height: 60px; }
+    .ms-skel-img { width: 60px; }
+    .ms-card-price { font-size: 13.5px; }
   }
 `;
 
-/* ═══════════════════════════════════════════════════
-   SVG ICONS  (unchanged from original)
-═══════════════════════════════════════════════════ */
-const Icon = {
-  Bookmark: ({ size = 16 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-    </svg>
-  ),
-  BookmarkFilled: ({ size = 14 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24"
-      fill="currentColor" stroke="currentColor" strokeWidth="1.5"
-      strokeLinecap="round" strokeLinejoin="round">
-      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-    </svg>
-  ),
-  MapPin: ({ size = 12 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-      <circle cx="12" cy="10" r="3" />
-    </svg>
-  ),
-  X: ({ size = 13 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  ),
-  Send: ({ size = 13 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="22" y1="2" x2="11" y2="13" />
-      <polygon points="22 2 15 22 11 13 2 9 22 2" />
-    </svg>
-  ),
-  Spinner: ({ size = 13 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
-      style={{ animation: "mspSpin 0.75s linear infinite" }}>
-      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-    </svg>
-  ),
-  ShoppingBag: ({ size = 36 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-      <line x1="3" y1="6" x2="21" y2="6" />
-      <path d="M16 10a4 4 0 0 1-8 0" />
-    </svg>
-  ),
-  CheckCircle: ({ size = 17 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-      <polyline points="22 4 12 14.01 9 11.01" />
-    </svg>
-  ),
+/* ─────────────────────────────────────────────────
+   ICONS
+───────────────────────────────────────────────── */
+const IC = {
+  Bookmark:    ({ s=12 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>,
+  BookmarkFill:({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>,
+  MapPin:      ({ s=10 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
+  Trash:       ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>,
+  Send:        ({ s=12 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
+  Loader:      ({ s=12 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{animation:"spin .75s linear infinite"}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>,
+  Check:       ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>,
+  CheckCircle: ({ s=10 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
+  Alert:       ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+  Bag:         ({ s=28 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>,
+  Image:       ({ s=26 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>,
 };
 
-/* ═══════════════════════════════════════════════════
-   TOAST  — Profile's bottom-center semantic style
-═══════════════════════════════════════════════════ */
-function Toast({ message, visible, type = "success" }) {
+/* ─────────────────────────────────────────────────
+   LAZY IMAGE
+───────────────────────────────────────────────── */
+const LazyImage = memo(function LazyImage({ src, alt }) {
+  const ref                   = useRef(null);
+  const [visible, setVisible] = useState(false);
+  const [loaded,  setLoaded]  = useState(false);
+  const [errored, setErrored] = useState(false);
+
+  useEffect(() => {
+    if (!src) return;
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting) { setVisible(true); io.disconnect(); } },
+      { rootMargin: "180px" }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [src]);
+
+  return (
+    <div className="ms-img-cell" ref={ref}>
+      {visible && src && !errored && (
+        <img
+          src={src} alt={alt}
+          className={loaded ? "loaded" : ""}
+          onLoad={() => setLoaded(true)}
+          onError={() => setErrored(true)}
+          decoding="async" loading="lazy"
+        />
+      )}
+      {(!loaded || !src || errored) && (
+        <div className="ms-img-ph" aria-hidden><IC.Image s={26} /></div>
+      )}
+    </div>
+  );
+});
+
+/* ─────────────────────────────────────────────────
+   CONDITION BADGE
+───────────────────────────────────────────────── */
+const COND_MAP = {
+  new:         { label: "New",    cls: "ms-cond-new"    },
+  used:        { label: "Used",   cls: "ms-cond-used"   },
+  refurbished: { label: "Refurb", cls: "ms-cond-refurb" },
+};
+function CondBadge({ condition }) {
+  if (!condition) return null;
+  const c = COND_MAP[condition.toLowerCase()] ?? { label: condition, cls: "ms-cond-used" };
+  return <span className={`ms-cond ${c.cls}`}>{c.label}</span>;
+}
+
+/* ─────────────────────────────────────────────────
+   AD SLOTS
+───────────────────────────────────────────────── */
+const AdLeader = memo(({ id }) => (
+  <div className="ms-ad ms-ad-leader" id={id} aria-label="Advertisement">
+    <span className="ms-ad-lbl">Advertisement</span>
+    <span className="ms-ad-sub">728 × 90</span>
+  </div>
+));
+const AdRect = memo(({ id }) => (
+  <div className="ms-ad-rect-wrap">
+    <div className="ms-ad ms-ad-rect" id={id} aria-label="Advertisement">
+      <span className="ms-ad-lbl">Advertisement</span>
+      <span className="ms-ad-sub">300 × 250</span>
+    </div>
+  </div>
+));
+
+/* ─────────────────────────────────────────────────
+   TOAST
+───────────────────────────────────────────────── */
+const Toast = memo(function Toast({ message, visible, type }) {
   if (!visible) return null;
   return (
-    <div className={`msp-toast${type === "error" ? " error" : ""}`}>
-      <Icon.CheckCircle />
+    <div className={`ms-toast${type === "error" ? " error" : ""}`} role="status" aria-live="polite">
+      {type === "error" ? <IC.Alert s={14} /> : <IC.Check s={14} />}
       {message}
     </div>
   );
-}
+});
 
-/* ═══════════════════════════════════════════════════
-   AD SLOTS  — Profile's hatched-diagonal placeholder
-═══════════════════════════════════════════════════ */
-function AdLeaderboard({ id }) {
-  return (
-    <div className="msp-ad-slot msp-ad-leaderboard" id={id} aria-label="Advertisement">
-      <span className="msp-ad-label">Advertisement</span>
-      <span className="msp-ad-sub">728 × 90 — Leaderboard Ad</span>
+/* ─────────────────────────────────────────────────
+   SKELETON
+───────────────────────────────────────────────── */
+const Skeleton = memo(({ delay = 0 }) => (
+  <div className="ms-skel" style={{ animationDelay: `${delay}ms` }}>
+    <div className="ms-skel-img" />
+    <div className="ms-skel-body">
+      <div className="ms-skel-line" style={{ width: "58%", animationDelay: `${delay+60}ms` }} />
+      <div className="ms-skel-line" style={{ width: "34%", height: "13px", animationDelay: `${delay+110}ms` }} />
+      <div className="ms-skel-line" style={{ width: "42%", animationDelay: `${delay+160}ms` }} />
     </div>
-  );
-}
-function AdRect({ id }) {
-  return (
-    <div className="msp-ad-rect-wrap">
-      <div className="msp-ad-slot msp-ad-rect" id={id} aria-label="Advertisement">
-        <span className="msp-ad-label">Advertisement</span>
-        <span className="msp-ad-sub">300 × 250 — Medium Rectangle</span>
-      </div>
-    </div>
-  );
-}
+  </div>
+));
 
-/* ═══════════════════════════════════════════════════
-   PRODUCT CARD  — Profile card dimensions + border + shadow
-═══════════════════════════════════════════════════ */
-function ProductCard({ product, onUnsave, onRequest, delay = 0 }) {
-  const [removing,   setRemoving]   = useState(false);
-  const [requesting, setRequesting] = useState(false);
+/* ─────────────────────────────────────────────────
+   PRODUCT CARD
+───────────────────────────────────────────────── */
+const ProductCard = memo(function ProductCard({
+  product, requested, onUnsave, onRequest, delay,
+}) {
+  const [removing, setRemoving] = useState(false);
+  const [sending,  setSending]  = useState(false);
 
-  const handleUnsave = () => {
+  const handleUnsave = useCallback(() => {
     setRemoving(true);
-    setTimeout(() => onUnsave(product.product_id), 320);
-  };
-  const handleRequest = async () => {
-    setRequesting(true);
+    setTimeout(() => onUnsave(product.product_id), 260);
+  }, [onUnsave, product.product_id]);
+
+  const handleRequest = useCallback(async () => {
+    if (requested || sending) return;
+    setSending(true);
     await onRequest(product.product_id);
-    setRequesting(false);
-  };
+    setSending(false);
+  }, [requested, sending, onRequest, product.product_id]);
+
+  const price = useMemo(
+    () => Number(product.price).toLocaleString("en-QA"),
+    [product.price]
+  );
 
   return (
-    <div
-      className={`msp-card${removing ? " removing" : ""}`}
+    <article
+      className={`ms-card${removing ? " removing" : ""}`}
       style={{ animationDelay: `${delay}ms` }}
     >
-      {/* Image */}
-      <div className="msp-img-wrap">
-        {product.image
-          ? <img src={product.image} alt={product.title} loading="lazy" />
-          : (
-            <div className="msp-img-placeholder">
-              <Icon.ShoppingBag size={36} />
-            </div>
-          )
-        }
+      <div className="ms-card-bar" aria-hidden />
+
+      {/* Image + condition */}
+      <div style={{ position: "relative" }}>
+        <LazyImage src={product.image} alt={product.title} />
+        <CondBadge condition={product.condition} />
       </div>
 
       {/* Info */}
-      <div className="msp-card-body">
-        <h3 className="msp-card-title" title={product.title}>
-          {product.title}
-        </h3>
-        <p className="msp-card-price">
-           ر.ق {Number(product.price).toLocaleString("en-IN")}
+      <div className="ms-info">
+        <h3 className="ms-card-title" title={product.title}>{product.title}</h3>
+        <p className="ms-card-price">
+          <small>QAR</small>{price}
         </p>
-        {product.city && (
-          <span className="msp-card-city">
-            <Icon.MapPin />
-            {product.city}
-          </span>
-        )}
+        <div className="ms-card-tags">
+          {product.city && (
+            <span className="ms-city">
+              <IC.MapPin s={10} />{product.city}
+            </span>
+          )}
+          {requested && (
+            <span className="ms-req-badge">
+              <IC.CheckCircle s={9} />Requested
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Buttons */}
-      <div className="msp-actions">
+      {/* Actions */}
+      <div className="ms-actions">
         <button
-          className="msp-btn msp-btn-unsave"
+          className="ms-btn ms-btn-unsave"
           onClick={handleUnsave}
           disabled={removing}
-          aria-label="Remove from saved"
+          aria-label={`Remove ${product.title} from saved`}
+          title="Remove from saved"
         >
-          <Icon.X />
-          <span className="msp-btn-label">Unsave</span>
+          <IC.Trash s={14} />
         </button>
         <button
-          className="msp-btn msp-btn-request"
+          className={`ms-btn ${requested ? "ms-btn-requested" : "ms-btn-request"}`}
           onClick={handleRequest}
-          disabled={requesting}
-          aria-label="Send request"
+          disabled={requested || sending || removing}
+          aria-label={requested ? "Already requested" : `Request ${product.title}`}
+          title={requested ? "Request already sent" : "Send request"}
         >
-          {requesting
-            ? <><Icon.Spinner size={13} /><span className="msp-btn-label">Sending…</span></>
-            : <><Icon.Send size={13} /><span className="msp-btn-label">Request</span></>
+          {sending
+            ? <><IC.Loader s={12} /><span className="ms-btn-label">Sending</span></>
+            : requested
+              ? <><IC.CheckCircle s={11} /><span className="ms-btn-label">Requested</span></>
+              : <><IC.Send s={12} /><span className="ms-btn-label">Request</span></>
           }
         </button>
       </div>
-    </div>
+    </article>
   );
-}
+});
 
-/* ═══════════════════════════════════════════════════
-   MAIN  — MarketplaceSaved
-═══════════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────────
+   MAIN
+───────────────────────────────────────────────── */
 export default function MarketplaceSaved() {
-  const [items,   setItems]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [toast,   setToast]   = useState({ message: "", visible: false });
+  const [items,        setItems]        = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [requestedIds, setRequestedIds] = useState(() => new Set());
+  const [toast,        setToast]        = useState({ message: "", visible: false, type: "success" });
+  const toastTimer = useRef(null);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await fetchSavedProducts();
+        if (!cancelled) setItems(res.data?.data ?? res.data ?? []);
+      } catch {
+        if (!cancelled) showToast("Failed to load saved items", "error");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-  const load = async () => {
-    setLoading(true);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+  const showToast = useCallback((msg, type = "success") => {
+    clearTimeout(toastTimer.current);
+    setToast({ message: msg, visible: true, type });
+    toastTimer.current = setTimeout(
+      () => setToast(t => ({ ...t, visible: false })),
+      2600
+    );
+  }, []);
+
+  const handleUnsave = useCallback(async (id) => {
     try {
-      const res = await fetchSavedProducts();
-      setItems(res.data?.data || res.data || []);
-    } finally {
-      setLoading(false);
+      await toggleSaveProduct(id);
+      setItems(prev => prev.filter(p => p.product_id !== id));
+      setRequestedIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+      showToast("Removed from saved");
+    } catch {
+      showToast("Could not remove item", "error");
     }
-  };
+  }, [showToast]);
 
-  const showToast = (msg, type = "success") => {
-    setToast({ message: msg, type, visible: true });
-    setTimeout(() => setToast(t => ({ ...t, visible: false })), 2800);
-  };
+  const handleRequest = useCallback(async (id) => {
+    try {
+      await requestProduct(id);
+      setRequestedIds(prev => new Set(prev).add(id));
+      showToast("Request sent successfully");
+    } catch {
+      showToast("Request failed — please try again", "error");
+    }
+  }, [showToast]);
 
-  const handleUnsave = async (id) => {
-    await toggleSaveProduct(id);
-    setItems(prev => prev.filter(p => p.product_id !== id));
-    showToast("Removed from saved");
-  };
-
-  const handleRequest = async (id) => {
-    await requestProduct(id);
-    showToast("Request sent successfully ✓");
-  };
-
-  // Interleave 300×250 rect ads every 4 cards
-  const renderItems = () => {
+  /* interleave rect ads every 8 cards */
+  const renderedItems = useMemo(() => {
     const out = [];
     items.forEach((p, i) => {
       out.push(
         <ProductCard
           key={p.product_id ?? p.id}
           product={p}
+          requested={requestedIds.has(p.product_id)}
           onUnsave={handleUnsave}
           onRequest={handleRequest}
-          delay={i * 55}
+          delay={Math.min(i * 40, 220)}
         />
       );
-      if ((i + 1) % 4 === 0 && i + 1 < items.length) {
-        out.push(<AdRect key={`ad-rect-${i}`} id={`ad-rect-${i}`} />);
+      if ((i + 1) % 8 === 0 && i + 1 < items.length) {
+        out.push(<AdRect key={`rect-${i}`} id={`ad-rect-${i}`} />);
       }
     });
     return out;
-  };
+  }, [items, requestedIds, handleUnsave, handleRequest]);
 
-  const count = (items || []).length;
+  const count = items.length;
 
   return (
     <MarketplaceLayout>
-      <style>{styles}</style>
+      <style>{STYLES}</style>
+      <div className="ms-page">
 
-      <div className="msp-page">
-
-        {/* ════════════════════════════════════
-            HERO — Profile's exact structure:
-            dot-grid div + floatOrb orbs + dual-path waveSlide + Fraunces h1
-        ════════════════════════════════════ */}
-        <div className="msp-hero">
-          {/* Dot grid */}
-          <div className="msp-hero-dots" />
-
-          {/* Floating orbs — no blur, floatOrb animation */}
-          <div className="msp-orb" style={{ width:260, height:260, top:"-90px", right:"-60px", animationDelay:"0s" }} />
-          <div className="msp-orb" style={{ width:140, height:140, bottom:"10px", left:"50px",  animationDelay:"2s" }} />
-          <div className="msp-orb" style={{ width:90,  height:90,  top:"40px",   left:"38%",   animationDelay:"4s", opacity:.6 }} />
-
-          {/* Dual-path wave — waveSlide, same fill colours as Profile */}
-          <svg className="msp-wave-svg" viewBox="0 0 1440 60" preserveAspectRatio="none">
-            <path
-              style={{ animation: "waveSlide 10s linear infinite" }}
-              d="M0,30 C240,55 480,5 720,30 C960,55 1200,5 1440,30 C1680,55 1920,5 2160,30 L2160,60 L0,60 Z"
-              fill="#f0f6ff"
-            />
-            <path
-              style={{ animation: "waveSlide 15s linear infinite reverse" }}
-              d="M0,42 C300,18 600,56 900,38 C1200,20 1500,52 1800,36 C2000,24 2160,46 2160,40 L2160,60 L0,60 Z"
-              fill="#e3f2fd" opacity="0.7"
-            />
+        {/* Hero */}
+        <header className="ms-hero">
+          <div className="ms-hero-grid" aria-hidden />
+          <div className="ms-orb" aria-hidden style={{ width:220,height:220,top:"-70px",right:"-45px",background:"rgba(96,165,250,.07)",animationDelay:"0s" }} />
+          <div className="ms-orb" aria-hidden style={{ width:110,height:110,bottom:"2px",left:"50px",background:"rgba(52,211,153,.06)",animationDelay:"2.5s" }} />
+          <div className="ms-orb" aria-hidden style={{ width:65,height:65,top:"40px",left:"40%",background:"rgba(255,255,255,.04)",animationDelay:"4.5s" }} />
+          <svg className="ms-wave" viewBox="0 0 1440 52" preserveAspectRatio="none" aria-hidden>
+            <path d="M0,26 C240,49 480,3 720,26 C960,49 1200,3 1440,26 C1680,49 1920,3 2160,26 L2160,52 L0,52 Z"
+              fill={C.bg} style={{ animation: "waveDrift 10s linear infinite" }} />
+            <path d="M0,38 C300,14 600,50 900,33 C1200,16 1500,48 1800,31 L2160,35 L2160,52 L0,52 Z"
+              fill={C.blueLt} opacity=".65" style={{ animation: "waveDrift 14s linear infinite reverse" }} />
           </svg>
 
-          {/* Inner content */}
-          <div className="msp-hero-inner">
-            {/* Eyebrow — glass pill */}
-            <div className="msp-eyebrow">
-              <span className="msp-eyebrow-dot" />
-              <Icon.Bookmark size={13} />
-              My Wishlist
+          <div className="ms-hero-body">
+            <div className="ms-eyebrow">
+              <span className="ms-eyebrow-dot" aria-hidden />
+              <IC.Bookmark s={11} />
+              Wishlist
             </div>
-
-            {/* Title — Fraunces 900 */}
-            <h1>
-              Saved{" "}
-              <span style={{
-                background: "linear-gradient(90deg, #93c5fd, #34d399)",
-                WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
-              }}>
-                Products
-              </span>
-            </h1>
-
-            <p className="msp-hero-sub">
-              Items you've bookmarked — ready whenever you are.
-            </p>
-
-            {/* Count badge — glass stat pill */}
+            <h1 className="ms-hero-title">Saved <span>Products</span></h1>
+            <p className="ms-hero-sub">Items you have bookmarked — ready whenever you are.</p>
             {!loading && (
-              <div className="msp-hero-badge">
-                <Icon.BookmarkFilled size={14} />
-                {count} {count === 1 ? "item" : "items"} saved
+              <div className="ms-hero-pills">
+                <div className="ms-pill">
+                  <IC.BookmarkFill s={13} />
+                  <span className="ms-pill-num">{count}</span>
+                  {count === 1 ? "item" : "items"} saved
+                </div>
+                {requestedIds.size > 0 && (
+                  <div className="ms-pill">
+                    <IC.CheckCircle s={13} />
+                    <span className="ms-pill-num">{requestedIds.size}</span>
+                    {requestedIds.size === 1 ? "request" : "requests"} sent
+                  </div>
+                )}
               </div>
             )}
           </div>
+        </header>
+
+        {/* Top ad */}
+        <div className="ms-ad-wrap ms-ad-top">
+          <AdLeader id="ad-top" />
         </div>
 
-        {/* ── Top leaderboard ad ── */}
-        <div className="msp-ad-wrap msp-ad-top">
-          <AdLeaderboard id="ad-top-leaderboard" />
-        </div>
-
-        {/* ── Product list ── */}
-        <div className="msp-content">
+        {/* List */}
+        <main className="ms-content">
+          {!loading && count > 0 && (
+            <div className="ms-section-head">
+              <h2 className="ms-section-title">Your collection</h2>
+              <div className="ms-divider" aria-hidden />
+            </div>
+          )}
           {loading ? (
-            <div className="msp-grid">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="msp-skeleton" style={{ animationDelay: `${i * 120}ms` }} />
-              ))}
+            <div className="ms-grid">
+              {Array.from({ length: 4 }, (_, i) => <Skeleton key={i} delay={i * 85} />)}
             </div>
           ) : count === 0 ? (
-            <div className="msp-empty">
-              <div className="msp-empty-icon">
-                <Icon.ShoppingBag size={38} />
+            <div className="ms-grid">
+              <div className="ms-empty">
+                <div className="ms-empty-icon"><IC.Bag s={28} /></div>
+                <h3>Nothing saved yet</h3>
+                <p>Browse the marketplace and bookmark items you love.</p>
               </div>
-              <h3>Nothing saved yet</h3>
-              <p>Browse the marketplace and bookmark items you love.</p>
             </div>
           ) : (
-            <div className="msp-grid">{renderItems()}</div>
+            <div className="ms-grid">{renderedItems}</div>
           )}
-        </div>
+        </main>
 
-        {/* ── Bottom leaderboard ad ── */}
+        {/* Bottom ad */}
         {!loading && count > 0 && (
-          <div className="msp-ad-wrap msp-ad-bottom">
-            <AdLeaderboard id="ad-bottom-leaderboard" />
+          <div className="ms-ad-wrap ms-ad-bot">
+            <AdLeader id="ad-bot" />
           </div>
         )}
       </div>

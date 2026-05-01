@@ -7,11 +7,11 @@ import { Search, Menu, X } from 'lucide-react'
 import { getPublicSettings } from '../api/titleApi'
 import { getImageUrl } from '../api/media'
 
-// SearchModal lazy-loaded — only downloaded when user opens search
+// ─── Lazy-loaded heavy components ────────────────────────────────────────────
 const SearchModal = lazy(() => import('./SearchModal'))
 
-/* ── Theme tokens ── */
-const themes = {
+// ─── Constants (defined once, never recreated) ───────────────────────────────
+const THEMES = {
   default: {
     accent: '#E24B4A', accentDark: '#C23937', accentLight: '#FCE8E8',
     accentText: '#A32D2D', pillBg: '#F7F7F5', pillBorder: '#EBEBEB',
@@ -32,19 +32,22 @@ const themes = {
   },
 }
 
-const navLinks = [
+const NAV_LINKS = [
   { name: 'Offers',      path: '/'            },
   { name: 'Marketplace', path: '/marketplace' },
   { name: 'Ticketing',   path: '/ticketing',  disabled: true },
 ]
 
-/* ── Inject fonts + keyframes once ── */
+const MOBILE_BREAKPOINT = 680
+
+// ─── One-time side effects (fonts + keyframes) ───────────────────────────────
+// Runs at module evaluation time — zero runtime overhead on re-renders.
 if (typeof document !== 'undefined') {
   if (!document.getElementById('navbar-fonts')) {
-    const link = document.createElement('link')
-    link.id = 'navbar-fonts'
-    link.rel = 'stylesheet'
-    link.href = 'https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap'
+    const link = Object.assign(document.createElement('link'), {
+      id: 'navbar-fonts', rel: 'stylesheet',
+      href: 'https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap',
+    })
     document.head.appendChild(link)
   }
   if (!document.getElementById('navbar-kf')) {
@@ -56,12 +59,12 @@ if (typeof document !== 'undefined') {
         100% { background-position: -200% 0 }
       }
       .nav-add-company {
-        transition: background-color 0.22s ease, color 0.22s ease, box-shadow 0.22s ease !important;
+        transition: background-color .22s ease, color .22s ease, box-shadow .22s ease !important;
       }
       .nav-add-company:hover {
         background-color: #800000 !important;
-        color: #ffffff !important;
-        box-shadow: 0 4px 14px rgba(128,0,0,0.25) !important;
+        color: #fff !important;
+        box-shadow: 0 4px 14px rgba(128,0,0,.25) !important;
         border-color: #800000 !important;
       }
     `
@@ -69,7 +72,37 @@ if (typeof document !== 'undefined') {
   }
 }
 
-/* ── Logo — memoized, only re-renders when settings/theme changes ── */
+// ─── Pure style helpers (no closure, no hook, zero allocation on re-render) ──
+function pillStyle(isActive, activePill) {
+  return {
+    padding: '6px 18px', borderRadius: 999,
+    fontSize: 13.5, textDecoration: 'none',
+    whiteSpace: 'nowrap', fontFamily: 'inherit',
+    transition: 'background .15s, color .15s',
+    backgroundColor: isActive ? activePill : 'transparent',
+    color: isActive ? '#fff' : '#6B6B6B',
+    fontWeight: isActive ? 600 : 400,
+  }
+}
+
+// ─── Custom hook: debounced mobile check ─────────────────────────────────────
+function useIsMobile(breakpoint = MOBILE_BREAKPOINT) {
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth < breakpoint
+  )
+  useEffect(() => {
+    let timer
+    const handler = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => setIsMobile(window.innerWidth < breakpoint), 100)
+    }
+    window.addEventListener('resize', handler, { passive: true })
+    return () => { window.removeEventListener('resize', handler); clearTimeout(timer) }
+  }, [breakpoint])
+  return isMobile
+}
+
+// ─── NavLogo — memoized; only re-renders when its props change ────────────────
 const NavLogo = memo(function NavLogo({ settings, loading, t }) {
   if (loading) return (
     <div style={{
@@ -82,8 +115,7 @@ const NavLogo = memo(function NavLogo({ settings, loading, t }) {
 
   if (!settings?.app_name) return null
 
-  const parts = settings.app_name.split(' ')
-  const [first, second, ...rest] = parts
+  const [first, second, ...rest] = settings.app_name.split(' ')
   const imageUrl = getImageUrl(settings?.logo)
 
   return (
@@ -92,8 +124,10 @@ const NavLogo = memo(function NavLogo({ settings, loading, t }) {
         <img
           src={imageUrl}
           alt="logo"
-          style={{ width: 32, height: 32, borderRadius: 45, objectFit: 'cover', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', flexShrink: 0 }}
+          style={{ width: 32, height: 32, borderRadius: 45, objectFit: 'cover', boxShadow: '0 2px 8px rgba(0,0,0,.12)', flexShrink: 0 }}
           onError={(e) => { e.target.style.display = 'none' }}
+          loading="lazy"
+          decoding="async"
         />
       ) : (
         <div style={{
@@ -120,81 +154,145 @@ const NavLogo = memo(function NavLogo({ settings, loading, t }) {
   )
 })
 
-/* ── useIsMobile — debounced resize ── */
-function useIsMobile(breakpoint = 680) {
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < breakpoint)
-  useEffect(() => {
-    let t
-    const handler = () => {
-      clearTimeout(t)
-      t = setTimeout(() => setIsMobile(window.innerWidth < breakpoint), 100)
-    }
-    window.addEventListener('resize', handler)
-    return () => { window.removeEventListener('resize', handler); clearTimeout(t) }
-  }, [breakpoint])
-  return isMobile
-}
+// ─── MobileMenu — memoized sub-component to avoid re-rendering nav on every open/close ──
+const MobileMenu = memo(function MobileMenu({ t, isMarketplace, isOffers, isLinkActive, loginUrl, onSearch }) {
+  return (
+    <div style={{
+      borderTop: `1px solid ${t.pillBorder}`, padding: '12px 16px 16px',
+      display: 'flex', flexDirection: 'column', gap: 6, backgroundColor: '#fff',
+    }}>
+      {NAV_LINKS.map(({ name, path, disabled }) => {
+        const isActive = isLinkActive(path)
+        return (
+          <Link
+            key={name}
+            to={disabled ? '#' : path}
+            style={{
+              display: 'block', padding: '10px 14px', borderRadius: 10,
+              fontSize: 14, textDecoration: 'none', fontFamily: 'inherit',
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              backgroundColor: isActive ? t.accentLight : 'transparent',
+              color: isActive ? t.accentText : '#1A1A1A',
+              fontWeight: isActive ? 600 : 400,
+              opacity: disabled ? 0.4 : 1,
+              pointerEvents: disabled ? 'none' : 'auto',
+              transition: 'background-color .2s, color .2s',
+            }}
+          >
+            {name}
+          </Link>
+        )
+      })}
 
-/* ── Main Navbar ── */
+      <div style={{ height: 1, backgroundColor: t.pillBorder, margin: '4px 0' }} />
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        {!isMarketplace && (
+          <button
+            onClick={onSearch}
+            style={{
+              flex: 1, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', gap: 8, padding: 10, borderRadius: 10,
+              border: `1px solid ${t.pillBorder}`, backgroundColor: t.pillBg,
+              color: '#6B6B6B', fontSize: 13.5, cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            <Search size={14} /> Search
+          </button>
+        )}
+        <Link
+          to={loginUrl}
+          style={{
+            flex: 1, padding: 10, borderRadius: 10,
+            backgroundColor: t.signinBg, color: '#fff',
+            fontSize: 13.5, fontWeight: 600, textDecoration: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'background-color .25s',
+          }}
+        >
+          Sign in
+        </Link>
+      </div>
+
+      {isOffers && (
+        <Link
+          to="/companyrequest"
+          className="nav-add-company"
+          style={{
+            marginTop: 2, padding: '10px 18px', backgroundColor: '#fff',
+            color: t.accentText, border: `1.5px solid ${t.accent}`,
+            borderRadius: 10, fontSize: 13.5, fontWeight: 600,
+            fontFamily: 'inherit', textDecoration: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          Add Your Company
+        </Link>
+      )}
+    </div>
+  )
+})
+
+// ─── Main Navbar ──────────────────────────────────────────────────────────────
 export default function Navbar() {
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [menuOpen, setMenuOpen]         = useState(false)
   const [settings, setSettings]         = useState(null)
   const [loading, setLoading]           = useState(true)
 
-  const isMobile  = useIsMobile()
-  const location  = useLocation()
+  const isMobile = useIsMobile()
+  const location = useLocation()
 
+  // Derived state — cheap boolean checks, no useMemo needed
   const isMarketplace = location.pathname.startsWith('/marketplace')
   const isOffers      = !isMarketplace && !location.pathname.startsWith('/ticketing')
-  const t             = isMarketplace ? themes.marketplace : themes.default
+  const t             = isMarketplace ? THEMES.marketplace : THEMES.default
   const loginUrl      = isMarketplace ? '/marketplace/login' : '/login'
 
-  // Use AbortController instead of cancelled flag
+  // Fetch public settings once; abort on unmount
   useEffect(() => {
     const controller = new AbortController()
     getPublicSettings({ signal: controller.signal })
       .then(res => setSettings(res.data))
       .catch(err => {
         if (err?.name === 'AbortError') return
-        if (err?.response?.status !== 404) console.warn('Could not load navbar settings:', err.message)
+        if (err?.response?.status !== 404) console.warn('Navbar settings error:', err.message)
       })
       .finally(() => setLoading(false))
     return () => controller.abort()
-  }, [])
+  }, []) // empty dep array — intentional single fetch
 
+  // Close mobile menu on navigation
   useEffect(() => { setMenuOpen(false) }, [location.pathname])
 
-  const openSearch  = useCallback(() => { setIsSearchOpen(true);  setMenuOpen(false) }, [])
+  const openSearch  = useCallback(() => { setIsSearchOpen(true); setMenuOpen(false) }, [])
   const closeSearch = useCallback(() => setIsSearchOpen(false), [])
   const toggleMenu  = useCallback(() => setMenuOpen(p => !p), [])
 
+  // Pure path comparison — no closure over derived booleans
   const isLinkActive = useCallback((path) =>
-    location.pathname === path ||
-    (path === '/marketplace' && isMarketplace && path !== '/'),
-    [location.pathname, isMarketplace]
+    path === '/'
+      ? location.pathname === '/'
+      : location.pathname.startsWith(path),
+    [location.pathname]
   )
-
-  const pillStyle = useCallback((isActive) => ({
-    padding: '6px 18px', borderRadius: 999,
-    fontSize: 13.5, textDecoration: 'none',
-    whiteSpace: 'nowrap', fontFamily: 'inherit',
-    transition: 'background 0.15s, color 0.15s',
-    backgroundColor: isActive ? t.activePill : 'transparent',
-    color: isActive ? '#FFFFFF' : '#6B6B6B',
-    fontWeight: isActive ? 600 : 400,
-  }), [t.activePill])
 
   return (
     <>
-      <nav style={{
-        position: 'sticky', top: 0, left: 0, width: '100%',
-        backgroundColor: '#FFFFFF',
-        borderBottom: `1px solid ${t.pillBorder}`,
-        boxShadow: isMarketplace ? '0 1px 4px rgba(37,99,235,0.08)' : '0 1px 4px rgba(0,0,0,0.05)',
-        zIndex: 50, fontFamily: 'system-ui, -apple-system, sans-serif',
-        transition: 'border-color 0.25s, box-shadow 0.25s',
-      }}>
+      <nav
+        role="navigation"
+        aria-label="Main navigation"
+        style={{
+          position: 'sticky', top: 0, left: 0, width: '100%',
+          backgroundColor: '#fff',
+          borderBottom: `1px solid ${t.pillBorder}`,
+          boxShadow: isMarketplace
+            ? '0 1px 4px rgba(37,99,235,.08)'
+            : '0 1px 4px rgba(0,0,0,.05)',
+          zIndex: 50, fontFamily: 'system-ui, -apple-system, sans-serif',
+          transition: 'border-color .25s, box-shadow .25s',
+        }}
+      >
         <div style={{
           maxWidth: 1200, margin: '0 auto', padding: '0 20px', height: 60,
           display: 'grid',
@@ -202,166 +300,148 @@ export default function Navbar() {
           alignItems: 'center', gap: 16,
         }}>
 
-          {/* LEFT */}
+          {/* LEFT — Logo */}
           <div style={{ display: 'flex', alignItems: 'center' }}>
             <NavLogo settings={settings} loading={loading} t={t} />
           </div>
 
-          {/* CENTRE — desktop pill nav */}
+          {/* CENTRE — Desktop pill nav */}
           {!isMobile && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 2,
-              backgroundColor: t.pillBg, border: `1px solid ${t.pillBorder}`,
-              borderRadius: 999, padding: 4, justifySelf: 'center',
-              transition: 'background-color 0.25s, border-color 0.25s',
-            }}>
-              {navLinks.map(({ name, path, disabled }) => (
-                <Link key={name} to={disabled ? '#' : path} style={{
-                  ...pillStyle(isLinkActive(path)),
-                  cursor: disabled ? 'not-allowed' : 'pointer',
-                  opacity: disabled ? 0.4 : 1,
-                  pointerEvents: disabled ? 'none' : 'auto',
-                }}>
+            <nav
+              aria-label="Section navigation"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 2,
+                backgroundColor: t.pillBg, border: `1px solid ${t.pillBorder}`,
+                borderRadius: 999, padding: 4, justifySelf: 'center',
+                transition: 'background-color .25s, border-color .25s',
+              }}
+            >
+              {NAV_LINKS.map(({ name, path, disabled }) => (
+                <Link
+                  key={name}
+                  to={disabled ? '#' : path}
+                  aria-disabled={disabled}
+                  aria-current={isLinkActive(path) ? 'page' : undefined}
+                  style={{
+                    ...pillStyle(isLinkActive(path), t.activePill),
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    opacity: disabled ? 0.4 : 1,
+                    pointerEvents: disabled ? 'none' : 'auto',
+                  }}
+                >
                   {name}
                 </Link>
               ))}
-            </div>
+            </nav>
           )}
 
-          {/* RIGHT — actions */}
+          {/* RIGHT — Actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, justifyContent: 'flex-end' }}>
 
+            {/* Desktop search */}
             {!isMobile && !isMarketplace && (
-              <button onClick={openSearch} style={{
-                height: 36, borderRadius: 999,
-                border: `1px solid ${t.pillBorder}`, backgroundColor: t.pillBg,
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '0 14px 0 10px',
-                cursor: 'pointer', color: '#6B6B6B', fontSize: 13,
-                transition: 'border-color 0.25s, background-color 0.25s',
-              }} title="Search">
+              <button
+                onClick={openSearch}
+                aria-label="Open search"
+                style={{
+                  height: 36, borderRadius: 999,
+                  border: `1px solid ${t.pillBorder}`, backgroundColor: t.pillBg,
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '0 14px 0 10px',
+                  cursor: 'pointer', color: '#6B6B6B', fontSize: 13,
+                  transition: 'border-color .25s, background-color .25s',
+                }}
+              >
                 <Search size={14} />
                 <span>{t.searchPlaceholder}</span>
               </button>
             )}
 
+            {/* Mobile search icon */}
             {isMobile && !isMarketplace && (
-              <button onClick={openSearch} style={{
-                width: 36, height: 36, borderRadius: 8,
-                border: `1px solid ${t.pillBorder}`, backgroundColor: '#FFFFFF',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', color: '#6B6B6B',
-              }} title="Search">
+              <button
+                onClick={openSearch}
+                aria-label="Open search"
+                style={{
+                  width: 36, height: 36, borderRadius: 8,
+                  border: `1px solid ${t.pillBorder}`, backgroundColor: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', color: '#6B6B6B',
+                }}
+              >
                 <Search size={15} />
               </button>
             )}
 
+            {/* Desktop sign in */}
             {!isMobile && (
-              <Link to={loginUrl} style={{
-                padding: '7px 20px', backgroundColor: t.signinBg, color: '#FFFFFF',
-                borderRadius: 999, fontSize: 13.5, fontWeight: 600,
-                whiteSpace: 'nowrap', fontFamily: 'inherit',
-                textDecoration: 'none', display: 'inline-block',
-                transition: 'background 0.25s',
-              }}>
+              <Link
+                to={loginUrl}
+                style={{
+                  padding: '7px 20px', backgroundColor: t.signinBg, color: '#fff',
+                  borderRadius: 999, fontSize: 13.5, fontWeight: 600,
+                  whiteSpace: 'nowrap', fontFamily: 'inherit',
+                  textDecoration: 'none', display: 'inline-block',
+                  transition: 'background .25s',
+                }}
+              >
                 Sign in
               </Link>
             )}
 
+            {/* Desktop add company — visibility toggled via CSS property, node stays mounted */}
             {!isMobile && (
-              <Link to="/companyrequest" className="nav-add-company" style={{
-                padding: '6px 18px', backgroundColor: '#FFFFFF',
-                color: t.accentText, border: `1.5px solid ${t.accent}`,
-                borderRadius: 999, fontSize: 13.5, fontWeight: 600,
-                whiteSpace: 'nowrap', fontFamily: 'inherit',
-                textDecoration: 'none', display: 'inline-block', flexShrink: 0,
-                visibility: isOffers ? 'visible' : 'hidden',
-                pointerEvents: isOffers ? 'auto' : 'none',
-              }}>
+              <Link
+                to="/companyrequest"
+                className="nav-add-company"
+                aria-hidden={!isOffers}
+                style={{
+                  padding: '6px 18px', backgroundColor: '#fff',
+                  color: t.accentText, border: `1.5px solid ${t.accent}`,
+                  borderRadius: 999, fontSize: 13.5, fontWeight: 600,
+                  whiteSpace: 'nowrap', fontFamily: 'inherit',
+                  textDecoration: 'none', display: 'inline-block', flexShrink: 0,
+                  visibility: isOffers ? 'visible' : 'hidden',
+                  pointerEvents: isOffers ? 'auto' : 'none',
+                }}
+              >
                 Add Your Company
               </Link>
             )}
 
+            {/* Mobile hamburger */}
             {isMobile && (
-              <button onClick={toggleMenu} style={{
-                width: 36, height: 36, borderRadius: 8,
-                border: `1px solid ${t.pillBorder}`, backgroundColor: '#FFFFFF',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', color: '#6B6B6B',
-              }}>
+              <button
+                onClick={toggleMenu}
+                aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+                aria-expanded={menuOpen}
+                style={{
+                  width: 36, height: 36, borderRadius: 8,
+                  border: `1px solid ${t.pillBorder}`, backgroundColor: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', color: '#6B6B6B',
+                }}
+              >
                 {menuOpen ? <X size={16} /> : <Menu size={16} />}
               </button>
             )}
           </div>
         </div>
 
-        {/* MOBILE MENU */}
+        {/* Mobile menu — separate memoized component */}
         {isMobile && menuOpen && (
-          <div style={{
-            borderTop: `1px solid ${t.pillBorder}`, padding: '12px 16px 16px',
-            display: 'flex', flexDirection: 'column', gap: 6, backgroundColor: '#FFFFFF',
-          }}>
-            {navLinks.map(({ name, path, disabled }) => {
-              const isActive = isLinkActive(path)
-              return (
-                <Link key={name} to={disabled ? '#' : path}
-                  onClick={() => setMenuOpen(false)}
-                  style={{
-                    display: 'block', padding: '10px 14px', borderRadius: 10,
-                    fontSize: 14, textDecoration: 'none', fontFamily: 'inherit',
-                    cursor: disabled ? 'not-allowed' : 'pointer',
-                    backgroundColor: isActive ? t.accentLight : 'transparent',
-                    color: isActive ? t.accentText : '#1A1A1A',
-                    fontWeight: isActive ? 600 : 400,
-                    opacity: disabled ? 0.4 : 1,
-                    pointerEvents: disabled ? 'none' : 'auto',
-                    transition: 'background-color 0.2s, color 0.2s',
-                  }}>
-                  {name}
-                </Link>
-              )
-            })}
-
-            <div style={{ height: 1, backgroundColor: t.pillBorder, margin: '4px 0' }} />
-
-            <div style={{ display: 'flex', gap: 8 }}>
-              {!isMarketplace && (
-                <button onClick={openSearch} style={{
-                  flex: 1, display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', gap: 8, padding: 10, borderRadius: 10,
-                  border: `1px solid ${t.pillBorder}`, backgroundColor: t.pillBg,
-                  color: '#6B6B6B', fontSize: 13.5, cursor: 'pointer', fontFamily: 'inherit',
-                }}>
-                  <Search size={14} /> Search
-                </button>
-              )}
-              <Link to={loginUrl} style={{
-                flex: 1, padding: 10, borderRadius: 10,
-                backgroundColor: t.signinBg, color: '#FFFFFF',
-                fontSize: 13.5, fontWeight: 600, textDecoration: 'none',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'background-color 0.25s',
-              }}>
-                Sign in
-              </Link>
-            </div>
-
-            {isOffers && (
-              <Link to="/companyrequest" className="nav-add-company" style={{
-                marginTop: 2, padding: '10px 18px', backgroundColor: '#FFFFFF',
-                color: t.accentText, border: `1.5px solid ${t.accent}`,
-                borderRadius: 10, fontSize: 13.5, fontWeight: 600,
-                fontFamily: 'inherit', textDecoration: 'none',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                Add Your Company
-              </Link>
-            )}
-          </div>
+          <MobileMenu
+            t={t}
+            isMarketplace={isMarketplace}
+            isOffers={isOffers}
+            isLinkActive={isLinkActive}
+            loginUrl={loginUrl}
+            onSearch={openSearch}
+          />
         )}
       </nav>
 
-      {/* SearchModal only mounted when open; Suspense handles lazy load */}
+      {/* SearchModal — lazy-loaded, only mounted when open */}
       {isSearchOpen && (
         <Suspense fallback={null}>
           <SearchModal onClose={closeSearch} />

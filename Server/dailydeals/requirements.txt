@@ -40,3 +40,6 @@ django-redis==5.4.0
 
 # 📦 Static files
 whitenoise==6.12.0
+
+
+mysqlclient==2.2.4

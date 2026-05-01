@@ -1,112 +1,100 @@
-import { defineConfig, splitVendorChunkPlugin } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { visualizer } from 'rollup-plugin-visualizer'
 
-// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const isProd = mode === 'production'
 
   return {
     plugins: [
       react(),
-      splitVendorChunkPlugin(), // auto-splits node_modules into a vendor chunk
+      visualizer({ open: true, gzipSize: true, filename: 'dist/stats.html' }),
     ],
 
-    /* ── Path aliases ── */
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
       },
     },
 
-    /* ── Dev server ── */
     server: {
       port: 3000,
       open: true,
     },
 
-    /* ── Build ── */
     build: {
-      target: 'es2015',          // broad browser support
-      sourcemap: !isProd,        // source maps in dev/staging only
-      minify: 'esbuild',         // fastest minifier (built into Vite)
-      chunkSizeWarningLimit: 500, // warn if any chunk > 500 kB
+      target: 'es2015',
+      sourcemap: !isProd,
+      minify: 'esbuild',
+      chunkSizeWarningLimit: 500,
 
       rollupOptions: {
         output: {
-          /**
-           * Manual chunk splitting strategy.
-           *
-           * Why: Without this every lazy() import becomes its own tiny file,
-           * which means dozens of round-trips on first visit to a section.
-           * Grouping related routes into shared chunks means:
-           *  - Admin pages share one chunk  → one download for the whole portal
-           *  - Marketplace pages share one  → same benefit
-           *  - Vendor libs are stable       → cached across deploys
-           */
           manualChunks(id) {
-            /* ── Vendor: React core ── */
+            // Vendor: React core
             if (
               id.includes('node_modules/react/') ||
               id.includes('node_modules/react-dom/') ||
               id.includes('node_modules/react-router-dom/') ||
               id.includes('node_modules/scheduler/')
-            ) {
-              return 'vendor-react'
-            }
+            ) return 'vendor-react'
 
-            /* ── Vendor: everything else in node_modules ── */
-            if (id.includes('node_modules/')) {
-              return 'vendor-libs'
-            }
+            // Vendor: PDF.js isolated
+            if (id.includes('node_modules/pdfjs-dist/')) return 'vendor-pdf'
 
-            /* ── App: Admin portal ── */
-            if (id.includes('/AdminComponents/')) {
-              return 'chunk-admin'
-            }
+            // Vendor: D3 (pulled in by recharts)
+            if (
+              id.includes('node_modules/d3') ||
+              id.includes('node_modules/d3-') ||
+              id.includes('node_modules/internmap') ||
+              id.includes('node_modules/delaunator') ||
+              id.includes('node_modules/robust-predicates')
+            ) return 'vendor-d3'
 
-            /* ── App: Marketplace ── */
-            if (id.includes('/Apps/Marketplace/')) {
-              return 'chunk-marketplace'
-            }
+            // Vendor: Recharts
+            if (id.includes('node_modules/recharts')) return 'vendor-recharts'
 
-            /* ── App: Company portal ── */
-            if (id.includes('/CompaniesComponent/')) {
-              return 'chunk-company'
-            }
+            // Vendor: Redux
+            if (
+              id.includes('node_modules/@reduxjs/') ||
+              id.includes('node_modules/redux') ||
+              id.includes('node_modules/reselect') ||
+              id.includes('node_modules/immer')
+            ) return 'vendor-redux'
 
-            /* ── App: User portal ── */
-            if (id.includes('/UserComponents/')) {
-              return 'chunk-user'
-            }
+            // Vendor: everything else
+            if (id.includes('node_modules/')) return 'vendor-libs'
 
-            /* ── App: Auth ── */
-            if (id.includes('/AuthComponents/')) {
-              return 'chunk-auth'
-            }
+            // App: Shared — must come before auth/marketplace
+            if (
+              id.includes('/utils/') ||
+              id.includes('/hooks/') ||
+              id.includes('/context/') ||
+              id.includes('/constants/') ||
+              id.includes('/services/')
+            ) return 'chunk-shared'
 
-            /* ── App: Static/extra pages ── */
-            if (id.includes('/pages/extras/')) {
-              return 'chunk-static'
-            }
-
-            // Everything else (layouts, routes, utils) stays in the main bundle
+            // App chunks
+            if (id.includes('/AuthComponents/'))     return 'chunk-auth'
+            if (id.includes('/Apps/Marketplace/'))   return 'chunk-marketplace'
+            if (id.includes('/AdminComponents/'))    return 'chunk-admin'
+            if (id.includes('/CompaniesComponent/')) return 'chunk-company'
+            if (id.includes('/UserComponents/'))     return 'chunk-user'
+            if (id.includes('/pages/extras/'))       return 'chunk-static'
           },
 
-          /* Deterministic filenames → better long-term CDN caching */
-          entryFileNames:  'assets/[name]-[hash].js',
-          chunkFileNames:  'assets/[name]-[hash].js',
-          assetFileNames:  'assets/[name]-[hash][extname]',
+          entryFileNames: 'assets/[name]-[hash].js',
+          chunkFileNames: 'assets/[name]-[hash].js',
+          assetFileNames: 'assets/[name]-[hash][extname]',
         },
       },
     },
 
-    /* ── CSS ── */
     css: {
       devSourcemap: true,
     },
 
-    /* ── Preview server (vite preview) ── */
     preview: {
       port: 4173,
     },
